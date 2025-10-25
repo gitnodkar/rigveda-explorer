@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Hindu-inspired palette - saffron, red, golden yellow */
+    --background: 35 25% 97%;
+    --foreground: 10 30% 15%;
+
+    --card: 35 30% 98%;
+    --card-foreground: 10 30% 15%;
+
+    --popover: 35 30% 98%;
+    --popover-foreground: 10 30% 15%;
+
+    /* Deep Saffron - primary color */
+    --primary: 25 95% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Vibrant Red - secondary color */
+    --secondary: 0 85% 55%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Soft cream muted */
+    --muted: 35 20% 92%;
+    --muted-foreground: 25 15% 45%;
+
+    /* Golden Yellow - accent color */
+    --accent: 45 100% 55%;
+    --accent-foreground: 10 30% 15%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 25% 88%;
+    --input: 35 20% 94%;
+    --ring: 25 95% 58%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens for Rigveda app */
+    --sanskrit: 0 75% 45%;
+    --translation: 200 35% 35%;
+    --verse-bg: 35 40% 96%;
+    --mantra-bg: 40 50% 97%;
+    
+    /* Gradients - saffron to red to yellow */
+    --gradient-header: linear-gradient(135deg, hsl(25 95% 58%) 0%, hsl(0 85% 55%) 50%, hsl(45 100% 55%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(35 30% 98%) 0%, hsl(35 25% 97%) 100%);
+    
+    /* Shadows with saffron glow */
+    --shadow-card: 0 2px 8px hsl(25 50% 30% / 0.08);
+    --shadow-hover: 0 4px 16px hsl(25 95% 58% / 0.25);
+  }
+
+  .dark {
+    --background: 15 20% 10%;
+    --foreground: 35 25% 92%;
+
+    --card: 15 18% 13%;
+    --card-foreground: 35 25% 92%;
+
+    --popover: 15 18% 13%;
+    --popover-foreground: 35 25% 92%;
+
+    --primary: 25 90% 65%;
+    --primary-foreground: 15 20% 10%;
+
+    --secondary: 0 80% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 15 15% 22%;
+    --muted-foreground: 35 18% 65%;
+
+    --accent: 45 95% 60%;
+    --accent-foreground: 15 20% 10%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 35 25% 92%;
+
+    --border: 15 15% 22%;
+    --input: 15 15% 22%;
+    --ring: 25 90% 65%;
+
+    --sanskrit: 0 75% 70%;
+    --translation: 200 35% 75%;
+    --verse-bg: 15 15% 16%;
+    --mantra-bg: 15 18% 18%;
+    
+    --shadow-card: 0 2px 8px hsl(0 0% 0% / 0.4);
+    --shadow-hover: 0 4px 16px hsl(25 90% 65% / 0.3);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+  
+  /* Devanagari font utility */
+  .font-devanagari {
+    font-family: 'Noto Sans Devanagari', serif;
+  }
+  
+  /* Sanskrit text styling */
+  .sanskrit-text {
+    font-family: 'Noto Sans Devanagari', serif;
+    font-size: 1.25rem;
+    line-height: 1.8;
+    color: hsl(var(--sanskrit));
+  }
+  
+  /* Translation text styling */
+  .translation-text {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: hsl(var(--translation));
+  }
+}
+
+@layer components {
+  /* Verse card with hover animation */
+  .verse-card {
+    @apply bg-card border border-border rounded-xl p-6 shadow-[var(--shadow-card)];
+    @apply transition-all duration-300 hover:shadow-[var(--shadow-hover)] hover:-translate-y-1;
+    border-left: 4px solid hsl(var(--primary));
+  }
+  
+  /* Stats box */
+  .stats-box {
+    @apply bg-card rounded-lg p-6 text-center border border-border;
+    @apply transition-all duration-300 hover:shadow-[var(--shadow-hover)] hover:-translate-y-1;
+    border-top: 3px solid hsl(var(--primary));
+  }
+  
+  /* Smooth transitions */
+  .smooth-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
