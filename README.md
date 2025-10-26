@@ -24,4 +24,4 @@ An interactive web app for exploring the Rigveda—ancient Hindu scriptures with
 ## Deploy
 - Vercel/Netlify: Auto-deploys on push.
 
-Questions? Open an issue!
+

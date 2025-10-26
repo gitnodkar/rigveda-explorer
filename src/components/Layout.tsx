@@ -32,7 +32,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   </div>
                   <div>• <strong>Search:</strong> Find verses based on Deity/Rishi/Meter/Mandala/Keywords</div>
                   <div>• <strong>Ask AI:</strong> Get answers with verse citations</div>
-                  <div>• <strong>Diacritics:</strong> Vedic chantings use 4 tones – Udātta (उदात्त - middle tone), Anudātta (अनुदात्त - lower tone), Svarita (स्वरित - higher tone) and Dīrgha Svarita (दीर्घस्वरित - high tone extended). These are marked with intuitive svara marks.</div>
+                  <div>• <strong>Diacritics:</strong> Vedic chantings use 4 tones – Udātta (उदात्त - middle tone), Anudātta (अनुदात्त - lower tone), Svarita (स्वरित - higher tone) and Dīrgha Svarita (दीर्घस्वरित - high tone extended). These are usually marked with intuitive svara marks – No mark for Udātta, an underline for Anudātta (अ॒), a small vertical line above the letter for Svarita (अ॑) and two vertical lines for Dīrgha svarita (आ᳚)</div>
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     <strong className="text-[#FF6B35]">Sanskrit Terms:</strong>
                   </div>
@@ -87,10 +87,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <footer className="bg-gray-100 dark:bg-gray-900 border-t mt-12">
         <div className="container mx-auto px-4 py-8 text-center">
           <p className="font-semibold text-gray-800 dark:text-gray-200 mb-2">
-            🕉️ Rig Veda Explorer • AI Powered • Sanskrit verses data sourced from Github • English translations by Ralph T.H. Griffith
+            🕉️ Rig Veda Explorer • AI Powered • Sanskrit verses sourced from bhavykhatri/DharmicData repository on Github • English translations by Ralph T.H. Griffith
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Built with ❤️ in Bhārat for Vedic scholars and spiritual seekers
+            Built with ❤️ in Bhārat for Vedic scholars and spiritual seekers, By Vedant Bamnodkar
           </p>
         </div>
       </footer>

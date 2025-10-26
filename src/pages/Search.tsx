@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { RigvedaVerse, SearchType } from "@/types/rigveda";
-import { 
-  getUniqueDeityOptions, 
-  getUniqueRishiOptions, 
+import { chatWithGroq, GroqMessage } from "@/lib/groq";
+import {
+  getUniqueDeityOptions,
+  getUniqueRishiOptions,
   getUniqueMeterOptions,
   getEnglishDeity,
   getEnglishRishi,
@@ -24,11 +26,15 @@ import {
 
 const Search = () => {
   const { data, loading, error } = useRigvedaData();
+  const { toast } = useToast();
   const [searchType, setSearchType] = useState<SearchType>("Keyword/Verse Reference");
   const [searchValue, setSearchValue] = useState("");
   const [filterValue, setFilterValue] = useState("All");
   const [maxResults, setMaxResults] = useState("1");
   const [currentPage, setCurrentPage] = useState(1);
+  const [translationLang, setTranslationLang] = useState("English (Griffith)");
+  const [translating, setTranslating] = useState<string | null>(null);
+  const [translations, setTranslations] = useState<Record<string, string>>({});
 
   // Filter data based on search criteria
   const filteredData = useMemo(() => {
@@ -38,19 +44,19 @@ const Search = () => {
 
     if (searchType === "Keyword/Verse Reference" && searchValue.trim()) {
       const query = searchValue.trim();
-      
+
       // Check for verse reference (1.1.1)
       const verseMatch = query.match(/^(\d+)\.(\d+)\.(\d+)$/);
       if (verseMatch) {
         const [, m, s, v] = verseMatch;
-        filtered = data.filter(row => 
+        filtered = data.filter(row =>
           row.mandala === m && row.sukta === s && row.verse === v
         );
       }
       // Check for sukta reference (1.1)
       else if (query.match(/^(\d+)\.(\d+)$/)) {
         const [m, s] = query.split('.');
-        filtered = data.filter(row => 
+        filtered = data.filter(row =>
           row.mandala === m && row.sukta === s
         );
       }
@@ -73,7 +79,7 @@ const Search = () => {
       const sanskritVariants = Object.entries(DEITY_MAPPINGS)
         .filter(([, eng]) => eng === filterValue)
         .map(([san]) => san);
-      filtered = data.filter(row => 
+      filtered = data.filter(row =>
         sanskritVariants.some(variant => row.deity?.includes(variant))
       );
     }
@@ -81,7 +87,7 @@ const Search = () => {
       const sanskritVariants = Object.entries(RISHI_MAPPINGS)
         .filter(([, eng]) => eng === filterValue)
         .map(([san]) => san);
-      filtered = data.filter(row => 
+      filtered = data.filter(row =>
         sanskritVariants.some(variant => row.rishi?.includes(variant))
       );
     }
@@ -89,7 +95,7 @@ const Search = () => {
       const sanskritVariants = Object.entries(METER_MAPPINGS)
         .filter(([, eng]) => eng === filterValue)
         .map(([san]) => san);
-      filtered = data.filter(row => 
+      filtered = data.filter(row =>
         sanskritVariants.some(variant => row.meter?.includes(variant))
       );
     }
@@ -117,6 +123,83 @@ const Search = () => {
   const handleFilterChange = (value: string) => {
     setFilterValue(value);
     setCurrentPage(1);
+  };
+
+  const handleTranslate = async (verse: RigvedaVerse, index: number) => {
+    const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+
+    if (!groqKey) {
+      toast({
+        title: "API Key Missing",
+        description: "Please add VITE_GROQ_API_KEY to your .env file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const langMap: Record<string, string> = {
+      "Hindi (हिंदी)": "Hindi",
+      "Marathi (मराठी)": "Marathi",
+      "Tamil (தமிழ்)": "Tamil",
+      "Telugu (తెలుగు)": "Telugu"
+    };
+
+    const targetLang = langMap[translationLang];
+    if (!targetLang) return;
+
+    const verseKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
+
+    // Check if already translated
+    if (translations[verseKey]) {
+      return;
+    }
+
+    setTranslating(verseKey);
+
+    try {
+      const prompt = `You are an expert literary translator specializing in English to ${targetLang} translation of sacred Vedic texts.
+
+Your task: Translate this English translation of a Rigveda verse into beautiful, natural ${targetLang}.
+
+CRITICAL INSTRUCTIONS:
+1. Translate the ENGLISH text below into ${targetLang}
+2. Maintain the poetic and devotional, respected tone. We are referring to Gods in here.
+3. Use natural ${targetLang} grammar and sentence structure
+4. Write in proper ${targetLang} script (Devanagari for Hindi/Marathi, Tamil/Telugu scripts)
+5. DO NOT transliterate Sanskrit - translate the English meaning
+6. Keep the literary quality of the original English
+7. Provide ONLY the ${targetLang} translation - no explanations
+
+English text to translate (from Griffith's translation):
+${verse.english_translation}
+
+Context:
+- This is verse ${verse.mandala}.${verse.sukta}.${verse.verse} from the Rigveda
+- Deity: ${getEnglishDeity(verse.deity)}
+- Rishi: ${getEnglishRishi(verse.rishi)}
+
+Now provide a natural, literary ${targetLang} translation:`;
+
+      const messages: GroqMessage[] = [
+        { role: 'user', content: prompt }
+      ];
+
+      const translation = await chatWithGroq(groqKey, messages, 'llama-3.3-70b-versatile');
+
+      setTranslations(prev => ({
+        ...prev,
+        [verseKey]: translation
+      }));
+
+    } catch (error) {
+      toast({
+        title: "Translation Failed",
+        description: error instanceof Error ? error.message : "Failed to translate",
+        variant: "destructive"
+      });
+    } finally {
+      setTranslating(null);
+    }
   };
 
   if (loading) {
@@ -152,7 +235,7 @@ const Search = () => {
           <CardTitle>Search Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Search By</label>
               <Select value={searchType} onValueChange={(val) => {
@@ -179,8 +262,8 @@ const Search = () => {
                 {searchType === "Keyword/Verse Reference" ? "Search Term" : `Select ${searchType}`}
               </label>
               {searchType === "Keyword/Verse Reference" ? (
-                <Input 
-                  placeholder="e.g., Agni, 1.1.1, fire" 
+                <Input
+                  placeholder="e.g., Agni, 1.1.1, fire"
                   value={searchValue}
                   onChange={(e) => handleSearchChange(e.target.value)}
                 />
@@ -242,6 +325,22 @@ const Search = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Translation Language</label>
+              <Select value={translationLang} onValueChange={setTranslationLang}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="English (Griffith)">English (Griffith)</SelectItem>
+                  <SelectItem value="Hindi (हिंदी)">Hindi (हिंदी)</SelectItem>
+                  <SelectItem value="Marathi (मराठी)">Marathi (मराठी)</SelectItem>
+                  <SelectItem value="Tamil (தமிழ்)">Tamil (தமிழ்)</SelectItem>
+                  <SelectItem value="Telugu (తెలుగు)">Telugu (తెలుగు)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -265,8 +364,8 @@ const Search = () => {
         </h2>
         {totalPages > 1 && (
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
@@ -274,7 +373,7 @@ const Search = () => {
               <ChevronLeft className="h-4 w-4" />
               Previous
             </Button>
-            
+
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
                 Page {currentPage} of {totalPages}
@@ -296,9 +395,9 @@ const Search = () => {
                 }}
               />
             </div>
-            
-            <Button 
-              variant="outline" 
+
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
@@ -346,10 +445,52 @@ const Search = () => {
               </div>
 
               {/* English Translation */}
-              <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
-                <div className="font-semibold mb-2">English Translation (Griffith):</div>
-                {verse.english_translation}
-              </div>
+              {translationLang === "English (Griffith)" ? (
+                <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
+                  <div className="font-semibold mb-2">English Translation (Griffith):</div>
+                  {verse.english_translation}
+                </div>
+              ) : (
+                <>
+                  <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400 mb-3">
+                    <div className="font-semibold mb-2">English Translation (Griffith):</div>
+                    {verse.english_translation}
+                  </div>
+
+                  {(() => {
+                    const langMap: Record<string, string> = {
+                      "Hindi (हिंदी)": "Hindi",
+                      "Marathi (मराठी)": "Marathi",
+                      "Tamil (தமிழ்)": "Tamil",
+                      "Telugu (తెలుగు)": "Telugu"
+                    };
+                    const targetLang = langMap[translationLang];
+                    const verseKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
+
+                    return translations[verseKey] ? (
+                      <div className="translation-text bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border-l-4 border-green-400">
+                        <div className="font-semibold mb-2">{translationLang} Translation:</div>
+                        {translations[verseKey]}
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => handleTranslate(verse, startIdx + idx)}
+                        disabled={translating === verseKey}
+                        className="w-full"
+                      >
+                        {translating === verseKey ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Translating to {translationLang}...
+                          </>
+                        ) : (
+                          <>🌐 Translate to {translationLang}</>
+                        )}
+                      </Button>
+                    );
+                  })()}
+                </>
+              )}
             </CardContent>
           </Card>
         ))

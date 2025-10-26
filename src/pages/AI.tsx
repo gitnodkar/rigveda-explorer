@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
-import { chatWithGroq, GroqMessage } from "@/lib/groq";
+import { chatWithGroqStream, GroqMessage } from "@/lib/groq";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { useToast } from "@/hooks/use-toast";
 
@@ -32,11 +32,21 @@ const AI = () => {
   const searchRigvedaVerses = (query: string): string => {
     if (!data.length) return "Data not loaded yet.";
 
+    const lowerQuery = query.toLowerCase().trim();
+
+    // Detect greetings or casual chit-chat to avoid irrelevant verse matches
+    const greetings = ['hi', 'hello', 'hey', 'namaste', 'greetings', 'sup', 'yo', 'what\'s up', 'howdy'];
+    const isGreeting = greetings.some(g => lowerQuery.startsWith(g)) || lowerQuery.length < 3;
+
+    if (isGreeting) {
+      return "No verses found matching the query.";
+    }
+
     // Check for verse reference (1.1.1)
     const verseMatch = query.match(/(\d+)\.(\d+)\.(\d+)/);
     if (verseMatch) {
       const [, m, s, v] = verseMatch;
-      const verse = data.find(row => 
+      const verse = data.find(row =>
         row.mandala === m && row.sukta === s && row.verse === v
       );
       if (verse) {
@@ -50,14 +60,21 @@ const AI = () => {
       const [, m, s] = suktaMatch;
       const verses = data.filter(row => row.mandala === m && row.sukta === s);
       if (verses.length > 0) {
-        return verses.slice(0, 3).map(v => 
+        return verses.slice(0, 3).map(v =>
           `${v.mandala}.${v.sukta}.${v.verse}: ${v.sanskrit}; ${v.english_translation}`
         ).join('\n\n');
       }
     }
 
-    // Keyword search
-    const lowerQuery = query.toLowerCase();
+    // Rigveda-specific keyword search (more targeted to avoid noise)
+    // Only match if query contains potential Rigveda terms (deities, concepts) or is substantive
+    const rigvedaKeywords = ['agni', 'indra', 'soma', 'varuna', 'rudra', 'vishnu', 'gayatri', 'purusha', 'nasadiya', 'mrityunjaya', 'mantra', 'sukta', 'rishi', 'deity', 'mandala', 'verse'];
+    const hasRigvedaTerm = rigvedaKeywords.some(keyword => lowerQuery.includes(keyword));
+
+    if (!hasRigvedaTerm) {
+      return "No verses found matching the query.";
+    }
+
     const results = data.filter(row =>
       row.english_translation?.toLowerCase().includes(lowerQuery) ||
       row.sanskrit?.includes(query) ||
@@ -65,7 +82,7 @@ const AI = () => {
     ).slice(0, 3);
 
     if (results.length > 0) {
-      return results.map(v => 
+      return results.map(v =>
         `${v.mandala}.${v.sukta}.${v.verse}: ${v.sanskrit}; ${v.english_translation}`
       ).join('\n\n');
     }
@@ -75,7 +92,7 @@ const AI = () => {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    
+
     if (!apiKey) {
       toast({
         title: "API Key Missing",
@@ -94,6 +111,9 @@ const AI = () => {
       // Search verses related to the query
       const verseContext = searchRigvedaVerses(userMessage);
       const hasVerses = verseContext !== "No verses found matching the query." && verseContext !== "Data not loaded yet.";
+
+      // Build history up to the last assistant message (exclude the just-added plain user message)
+      const history = messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
 
       const groqMessages: GroqMessage[] = [
         {
@@ -115,15 +135,30 @@ The database contains all famous hymns including:
 - Nasadiya Sukta/Creation Hymn (10.129)
 - Maha Mrityunjaya Mantra (7.59.12)`
         },
-        ...messages.map(m => ({ role: m.role, content: m.content })),
+        ...history,
         {
           role: 'user',
           content: hasVerses ? `${userMessage}\n\nRelevant verses from the database:\n${verseContext}` : userMessage
         }
       ];
 
-      const response = await chatWithGroq(apiKey, groqMessages, 'llama-3.1-8b-instant');
-      setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      // Add empty assistant message that will be updated as chunks arrive
+      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+      let fullResponse = '';
+      await chatWithGroqStream(
+        apiKey,
+        groqMessages,
+        (chunk) => {
+          fullResponse += chunk;
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'assistant', content: fullResponse };
+            return updated;
+          });
+        },
+        'llama-3.3-70b-versatile'
+      );
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -131,8 +166,13 @@ The database contains all famous hymns including:
         description: error instanceof Error ? error.message : "Failed to get response. Check your API key.",
         variant: "destructive"
       });
-      // Remove the user message if there was an error
-      setMessages(prev => prev.slice(0, -1));
+      // Remove the user message and empty assistant placeholder if there was an error
+      setMessages(prev => {
+        if (prev.length >= 2 && prev[prev.length - 2].role === 'user' && prev[prev.length - 1].role === 'assistant') {
+          return prev.slice(0, -2);
+        }
+        return prev.slice(0, -1); // Fallback: just remove the last (user) if assistant not added
+      });
       setInput(userMessage);
     } finally {
       setLoading(false);
@@ -164,10 +204,10 @@ The database contains all famous hymns including:
                 <h2 className="text-2xl font-semibold mb-2">Welcome to AI Scholar</h2>
                 <p className="text-muted-foreground mb-6">Ask me anything about the Rigveda</p>
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-4 w-full max-w-2xl">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-auto p-4 text-left justify-start"
                   onClick={() => setInput("Explain the role of Agni in Rigveda like I'm five")}
                 >
@@ -176,8 +216,8 @@ The database contains all famous hymns including:
                     <div className="text-xs text-muted-foreground">Explain the role of Agni in Rigveda like I'm five</div>
                   </div>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-auto p-4 text-left justify-start"
                   onClick={() => setInput("What is the Gayatri Mantra and its significance?")}
                 >
@@ -186,8 +226,8 @@ The database contains all famous hymns including:
                     <div className="text-xs text-muted-foreground">What is the Gayatri Mantra and its significance?</div>
                   </div>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-auto p-4 text-left justify-start"
                   onClick={() => setInput("Summarize the Purusha Sukta in 3 bullet points")}
                 >
@@ -196,8 +236,8 @@ The database contains all famous hymns including:
                     <div className="text-xs text-muted-foreground">Summarize the Purusha Sukta in 3 bullet points</div>
                   </div>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-auto p-4 text-left justify-start"
                   onClick={() => setInput("Explain verse 1.1.1")}
                 >

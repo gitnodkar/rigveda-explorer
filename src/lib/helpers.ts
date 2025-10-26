@@ -43,8 +43,9 @@ export const DEITY_MAPPINGS: Record<string, string> = {
   "पूषा": "Pushan",
   "वायुः": "Vayu",
   "वायु:": "Vayu",
-  "सूर्यः": "Surya",
+  "सूर्य": "Surya",
   "रुद्रः": "Rudra (Shiva)",
+  "रुद्र:": "Rudra (Shiva)",
   "अश्वः": "Ashva"
 };
 
@@ -52,29 +53,30 @@ export const DEITY_MAPPINGS: Record<string, string> = {
 export const RISHI_MAPPINGS: Record<string, string> = {
   "वामदेवो गौतम": "Vamadeva Gautama",
   "बार्हस्पत्यो भरद्वाज": "Bharadvaja Bruhaspatya",
+  "भरद्वाज": "Bharadvaja Bruhaspatya",
   "मैत्रावरुणिर्वसिष्ठ": "Vasishtha Maitravaruna",
-  " मैत्रावरुणिर्वसिष्ठ": "Vasishtha Maitravaruna",
-  "गाथिनो विश्वामित्रः": "Vishvamitra Gaathina",
+  "वसिष्ठ": "Vasishtha Maitravaruna",
+  "विश्वामित्र": "Vishvamitra Gaathina",
   "गृत्समद": "Gritsamada Angirasa Bhargava",
   "दीर्घतमा औचथ्य": "Dirghatamas Auchathya",
   "गोतमो राहूगण": "Gotama Rahugana",
-  "कुत्स आङ्गिरस": "Kutsa Angirasa",
   "कक्षीवान् दैर्घतमस": "Kakshivaan Dairghatamasa",
   "श्यावाश्व आत्रेय": "Shyavashva Atreya",
   "कविर्भार्गव": "Kavi Bhargava",
-  "त्रिशोक काण्व": "Trishok Kanva",
+  "त्रिशोक": "Trishok Kanva",
+  "सप्तर्षय":"The Saptarishi",
   "प्रजापतिर्वैश्वामित्र": "Prajapati Vaishvamitra",
-  "मेघातिथि": "Medhatithi Kanva",
-  "मेधातिथि": "Medhatithi Kanva",
-  "मेध्यातिथि": "Medhatithi Kanva",
   "सावित्री सूर्या ऋषिका": "Surya Savitri Rishika",
   "काश्यपोऽसितो देवलो वा": "Kashyapa Asita Devala",
-  "वत्स": "Vatsa Kanva",
   "त्रित आप्त्य": "Trita Aaptya",
   "अगस्त्यो मैत्रावरुणि": "Agastya Maitravaruna",
   "विश्वमना वैयश्व": "Vishvamana Vaiyashva",
-  "पराशर शाक्त्य": "Parashar Shaaktya",
-  "मधुच्छन्दा वैश्वामित्र": "Madhucchhanda Vaishvamitra"
+  "पराशर": "Parashar Shaaktya",
+  "मधुच्छन्दा वैश्वामित्र": "Madhucchhanda Vaishvamitra",
+  "आत्रेय":"The Atreyas",
+  "त्रेय":"The Atreyas",
+  "काण्व":"The Kanvas",
+  "आङ्गिरस":"The Angirasas"
 };
 
 // Meter mappings (Sanskrit to English)
@@ -84,10 +86,10 @@ export const METER_MAPPINGS: Record<string, string> = {
   "जगती": "Jagati",
   "अनुष्टुप्": "Anushtubh",
   "उष्णिक्": "Ushnik",
-  "प्रगाथ:= ( विषमा बृहती, समा सतोबृहती )": "Pragatha",
   "द्विपदा विराट्": "Dvipada Virat",
   "पंक्तिः": "Pankti",
-  "महापंक्ति:": "Mahapankti",
+  "पङ्क्तिः":"Pankti",
+  "महापंक्ति": "Mahapankti",
   "अत्यष्टिः": "Atyashti",
   "बृहती": "Bruhati",
   "महाबृहती": "Mahabruhati"
@@ -166,7 +168,7 @@ export const FAMOUS_MANTRAS = {
 // Rivers mentioned in Rigveda
 export const RIVERS: Record<string, string[]> = {
   "Sarasvati": ["सरस्वत", "Sarasvatî"],
-  "Sindhu (Indus)": ["सिन्ध"],
+  "Sindhu (Indus, SaptaSindhu, River)": ["सिन्ध"],
   "Ganga": ["गङ्गा", "Gangâ"],
   "Yamuna": ["यमुना", "Yamunâ"],
   "Kubha (Kabul)": ["Kubhâ"],
