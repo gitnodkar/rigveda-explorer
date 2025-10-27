@@ -440,7 +440,7 @@ Now provide a natural, literary ${targetLang} translation:`;
               </div>
 
               {/* Sanskrit Text */}
-              <div className="sanskrit-text bg-verse-bg rounded-lg p-4 mb-4 font-devanagari text-lg leading-relaxed">
+              <div className="sanskrit-text bg-verse-bg rounded-lg p-4 mb-4 font-devanagari text-xl md:text-2xl leading-relaxed">
                 {verse.sanskrit}
               </div>
 
