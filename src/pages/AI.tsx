@@ -6,6 +6,7 @@ import { Send, Loader2 } from "lucide-react";
 import { chatWithGroqStream, GroqMessage } from "@/lib/groq";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { useToast } from "@/hooks/use-toast";
+import OmImage from "/public/om.png"; // Replace with the path to your custom PNG
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -18,16 +19,24 @@ const AI = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const messagesContainer = useRef<HTMLDivElement>(null);
   const apiKey = import.meta.env.VITE_GROQ_API_KEY || '';
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainer.current) {
+      messagesContainer.current.scrollTo({
+        top: messagesContainer.current.scrollHeight,
+        behavior: "smooth"
+      });
+    }
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (autoScroll && !loading) {
+      scrollToBottom();
+    }
+  }, [messages, autoScroll, loading]);
 
   const searchRigvedaVerses = (query: string): string => {
     if (!data.length) return "Data not loaded yet.";
@@ -47,10 +56,12 @@ const AI = () => {
     if (verseMatch) {
       const [, m, s, v] = verseMatch;
       const verse = data.find(row =>
-        row.mandala === m && row.sukta === s && row.verse === v
+        parseInt(String(row.mandala)) === parseInt(m) &&
+        parseInt(String(row.sukta)) === parseInt(s) &&
+        parseInt(String(row.verse)) === parseInt(v)
       );
       if (verse) {
-        return `Verse ${m}.${s}.${v}:\nSanskrit: ${verse.sanskrit}\nEnglish: ${verse.english_translation}\nDeity: ${verse.deity}\nRishi: ${verse.rishi}`;
+        return `Verse ${m}.${s}.${v}:\nSanskrit: ${verse.sanskrit}\nTransliteration: ${verse.transliteration || 'N/A'}\nEnglish Translation: ${verse.english_translation}\nDeity: ${verse.deity || 'N/A'}\nRishi: ${verse.rishi || 'N/A'}`;
       }
     }
 
@@ -58,17 +69,20 @@ const AI = () => {
     const suktaMatch = query.match(/(\d+)\.(\d+)/);
     if (suktaMatch) {
       const [, m, s] = suktaMatch;
-      const verses = data.filter(row => row.mandala === m && row.sukta === s);
+      const verses = data.filter(row =>
+        parseInt(String(row.mandala)) === parseInt(m) &&
+        parseInt(String(row.sukta)) === parseInt(s)
+      );
       if (verses.length > 0) {
         return verses.slice(0, 3).map(v =>
-          `${v.mandala}.${v.sukta}.${v.verse}: ${v.sanskrit}; ${v.english_translation}`
+          `Verse ${v.mandala}.${v.sukta}.${v.verse}:\nSanskrit: ${v.sanskrit}\nTransliteration: ${v.transliteration || 'N/A'}\nEnglish Translation: ${v.english_translation}\nDeity: ${v.deity || 'N/A'}\nRishi: ${v.rishi || 'N/A'}`
         ).join('\n\n');
       }
     }
 
     // Rigveda-specific keyword search (more targeted to avoid noise)
     // Only match if query contains potential Rigveda terms (deities, concepts) or is substantive
-    const rigvedaKeywords = ['agni', 'indra', 'soma', 'varuna', 'rudra', 'vishnu', 'gayatri', 'purusha', 'nasadiya', 'mrityunjaya', 'mantra', 'sukta', 'rishi', 'deity', 'mandala', 'verse'];
+    const rigvedaKeywords = ['agni', 'indra', 'soma', 'varuna', 'rudra', 'vishnu', 'gayatri', 'purusha', 'nasadiya', 'mrityunjaya', 'mantra', 'sukta', 'rishi', 'deity', 'mandala', 'verse', 'sanskrit', 'transliteration', 'translation'];
     const hasRigvedaTerm = rigvedaKeywords.some(keyword => lowerQuery.includes(keyword));
 
     if (!hasRigvedaTerm) {
@@ -77,13 +91,15 @@ const AI = () => {
 
     const results = data.filter(row =>
       row.english_translation?.toLowerCase().includes(lowerQuery) ||
-      row.sanskrit?.includes(query) ||
-      row.deity?.toLowerCase().includes(lowerQuery)
+      row.sanskrit?.toLowerCase().includes(lowerQuery) ||
+      row.deity?.toLowerCase().includes(lowerQuery) ||
+      row.rishi?.toLowerCase().includes(lowerQuery) ||
+      (row.transliteration && row.transliteration.toLowerCase().includes(lowerQuery))
     ).slice(0, 3);
 
     if (results.length > 0) {
       return results.map(v =>
-        `${v.mandala}.${v.sukta}.${v.verse}: ${v.sanskrit}; ${v.english_translation}`
+        `Verse ${v.mandala}.${v.sukta}.${v.verse}:\nSanskrit: ${v.sanskrit}\nTransliteration: ${v.transliteration || 'N/A'}\nEnglish Translation: ${v.english_translation}\nDeity: ${v.deity || 'N/A'}\nRishi: ${v.rishi || 'N/A'}`
       ).join('\n\n');
     }
 
@@ -104,16 +120,38 @@ const AI = () => {
 
     const userMessage = input.trim();
     setInput("");
+
+    // Compute searchQuery, potentially using previous user message for follow-ups
+    let searchQuery = userMessage;
+    const verseRegex = /(\d+)\.(\d+)\.(\d+)/;
+    const verseKeywords = ['sanskrit', 'transliteration', 'translation', 'translit', 'verse'];
+    const isVerseRequest = !verseRegex.test(userMessage) && verseKeywords.some(k => userMessage.toLowerCase().includes(k.toLowerCase()));
+    if (isVerseRequest) {
+      // Find last user message with verse ref
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user' && verseRegex.test(messages[i].content)) {
+          searchQuery = messages[i].content;
+          break;
+        }
+      }
+    }
+
+    const verseContext = searchRigvedaVerses(searchQuery);
+    const hasVerses = verseContext !== "No verses found matching the query." && verseContext !== "Data not loaded yet.";
+
+    // Build full history up to previous messages
+    const history = messages.map(m => ({ role: m.role, content: m.content }));
+
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    if (autoScroll) {
+      scrollToBottom();
+    }
     setLoading(true);
 
     try {
-      // Search verses related to the query
-      const verseContext = searchRigvedaVerses(userMessage);
-      const hasVerses = verseContext !== "No verses found matching the query." && verseContext !== "Data not loaded yet.";
-
-      // Build history up to the last assistant message (exclude the just-added plain user message)
-      const history = messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
+      const userContent = hasVerses
+        ? `${userMessage}\n\n[VERSE DATA]\n${verseContext}\n[END VERSE DATA]`
+        : userMessage;
 
       const groqMessages: GroqMessage[] = [
         {
@@ -123,11 +161,12 @@ const AI = () => {
 You have access to a database of 10,552 verses across 10 Mandalas.
 
 When answering:
-1. Use the provided verse context when available
-2. Cite specific verse references in Mandala.Sukta.Verse format (e.g., 1.1.1)
-3. Provide comprehensive answers with context and significance
-4. For general greetings or questions without verse references, respond naturally and offer to help
-5. Keep answers concise and scholarly
+1. If [VERSE DATA] ... [END VERSE DATA] is provided in the user message, use EXACTLY the Sanskrit, Transliteration, English Translation, Deity, and Rishi from within it for verse details. Do NOT generate, alter, recall, or use your own knowledge of the verses; stick strictly to the provided data. Quote the exact texts and attribute them as from the database.
+2. If the user explicitly asks for verses, transliterations, or translations (e.g., "give me the Sanskrit of...", "transliterate...", "translate verse..."), prioritize providing the full details from the [VERSE DATA]: Sanskrit text, transliteration (if available), English translation, deity, and rishi.
+3. Cite specific verse references in Mandala.Sukta.Verse format (e.g., 1.1.1)
+4. Provide comprehensive answers with context and significance, but always base verse details on the provided [VERSE DATA].
+5. For general greetings or chit-chat, respond briefly and welcomingly (1-2 sentences max), then ask how you can assist with the Rigveda. Do not mention specific verses or hymns unless the user asks.
+6. Keep answers concise and scholarly. For rishi and deity in Devanagari, present them as is.
 
 The database contains all famous hymns including:
 - Gayatri Mantra (3.62.10)
@@ -138,7 +177,7 @@ The database contains all famous hymns including:
         ...history,
         {
           role: 'user',
-          content: hasVerses ? `${userMessage}\n\nRelevant verses from the database:\n${verseContext}` : userMessage
+          content: userContent
         }
       ];
 
@@ -156,6 +195,7 @@ The database contains all famous hymns including:
             updated[updated.length - 1] = { role: 'assistant', content: fullResponse };
             return updated;
           });
+          // No scrolling during streaming chunks
         },
         'llama-3.3-70b-versatile'
       );
@@ -176,6 +216,9 @@ The database contains all famous hymns including:
       setInput(userMessage);
     } finally {
       setLoading(false);
+      if (autoScroll) {
+        scrollToBottom();
+      }
     }
   };
 
@@ -186,20 +229,29 @@ The database contains all famous hymns including:
     }
   };
 
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    setAutoScroll(scrollTop + clientHeight >= scrollHeight - 5);
+  };
+
   return (
     <div className="container py-8 max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-4xl font-bold mb-3">💬 Ask AI Scholar</h1>
+        <h1 className="text-4xl font-bold mb-3">AI Scholar</h1>
         <p className="text-lg text-muted-foreground">
           Get answers about the Rigveda with verse citations
         </p>
       </div>
 
       <Card className="mb-4 min-h-[500px] flex flex-col">
-        <CardContent className="flex-1 p-6 overflow-y-auto">
+        <CardContent
+          ref={messagesContainer}
+          className="flex-1 p-6 overflow-y-auto"
+          onScroll={handleScroll}
+        >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
-              <div className="text-6xl mb-4">🕉️</div>
+              <img src={OmImage} alt="Om Symbol" className="h-24 w-24 mb-4" />
               <div>
                 <h2 className="text-2xl font-semibold mb-2">Welcome to AI Scholar</h2>
                 <p className="text-muted-foreground mb-6">Ask me anything about the Rigveda</p>
@@ -276,7 +328,6 @@ The database contains all famous hymns including:
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} />
             </div>
           )}
         </CardContent>

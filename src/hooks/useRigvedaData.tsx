@@ -10,7 +10,7 @@ export const useRigvedaData = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await fetch('/rigvedaretry_with_english2.csv');
+        const response = await fetch('/rigveda_with_translit.csv');
         const csvText = await response.text();
         
         Papa.parse<RigvedaVerse>(csvText, {

@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Volume2, Pause } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { RigvedaVerse, SearchType } from "@/types/rigveda";
@@ -35,6 +35,10 @@ const Search = () => {
   const [translationLang, setTranslationLang] = useState("English (Griffith)");
   const [translating, setTranslating] = useState<string | null>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [isPlaying, setIsPlaying] = useState<Record<string, boolean>>({});
+  const [audioProgress, setAudioProgress] = useState<Record<string, {currentTime: number, duration: number | null}>>({});
+  const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+  const audioListeners = useRef<Record<string, {timeupdate: () => void, ended: () => void, loadedmetadata: () => void}>>({});
 
   // Filter data based on search criteria
   const filteredData = useMemo(() => {
@@ -60,15 +64,27 @@ const Search = () => {
           row.mandala === m && row.sukta === s
         );
       }
-      // Keyword search
+      // Keyword search (UPDATED: Detect script and search only in relevant column, diacritic-independent)
       else {
-        const lowerQuery = query.toLowerCase();
-        filtered = data.filter(row =>
-          row.english_translation?.toLowerCase().includes(lowerQuery) ||
-          row.sanskrit?.includes(query) ||
-          row.deity?.toLowerCase().includes(lowerQuery) ||
-          row.rishi?.toLowerCase().includes(lowerQuery)
-        );
+        const normalizedQuery = removeDiacritics(query);
+        const lowerNormalizedQuery = normalizedQuery.toLowerCase();
+
+        // Detect if query contains Devanagari (Sanskrit script)
+        const isDevanagari = /[\u0900-\u097F]/.test(query);
+
+        if (isDevanagari) {
+          // Search only in sanskrit column (diacritic-independent)
+          filtered = data.filter(row => {
+            const normalizedSanskrit = removeDiacritics(row.sanskrit || '');
+            return normalizedSanskrit.includes(normalizedQuery);
+          });
+        } else {
+          // Search only in englishtranslation column (case-insensitive, diacritic-independent)
+          filtered = data.filter(row => {
+            const normalizedTranslit = removeDiacritics(row.english_translation || '').toLowerCase();
+            return normalizedTranslit.includes(lowerNormalizedQuery);
+          });
+        }
       }
     }
     else if (searchType === "Mandala" && filterValue !== "All") {
@@ -125,6 +141,136 @@ const Search = () => {
     setCurrentPage(1);
   };
 
+  const handleSeek = useCallback((suktaKey: string, value: number) => {
+    const audio = audioRefs.current[suktaKey];
+    if (audio) {
+      audio.currentTime = value;
+      setAudioProgress((prev) => ({
+        ...prev,
+        [suktaKey]: {
+          ...prev[suktaKey],
+          currentTime: value,
+        },
+      }));
+    }
+  }, []);
+
+  const handleAudioToggle = useCallback((verse: RigvedaVerse) => {
+    const suktaKey = `${verse.mandala}.${verse.sukta}`;
+    let audio = audioRefs.current[suktaKey];
+
+    if (isPlaying[suktaKey]) {
+      // Pause
+      if (audio) {
+        audio.pause();
+        const listeners = audioListeners.current[suktaKey];
+        if (listeners) {
+          audio.removeEventListener("loadedmetadata", listeners.loadedmetadata);
+          audio.removeEventListener("timeupdate", listeners.timeupdate);
+          audio.removeEventListener("ended", listeners.ended);
+          delete audioListeners.current[suktaKey];
+        }
+      }
+      setIsPlaying((prev) => ({ ...prev, [suktaKey]: false }));
+      return;
+    }
+
+    // Pause all other audios
+    Object.entries(audioRefs.current).forEach(([key, a]) => {
+      if (key !== suktaKey && a) {
+        const otherListeners = audioListeners.current[key];
+        if (otherListeners) {
+          a.removeEventListener("loadedmetadata", otherListeners.loadedmetadata);
+          a.removeEventListener("timeupdate", otherListeners.timeupdate);
+          a.removeEventListener("ended", otherListeners.ended);
+          delete audioListeners.current[key];
+        }
+        a.pause();
+        setIsPlaying((prev) => ({ ...prev, [key]: false }));
+      }
+    });
+
+    // Play current
+    if (!audio) {
+      audio = new Audio(`/audio/${verse.mandala}/${verse.sukta}.mp3`);
+      audioRefs.current[suktaKey] = audio;
+      setAudioProgress((prev) => ({ ...prev, [suktaKey]: { currentTime: 0, duration: null } }));
+    }
+
+    // Remove existing listeners if any
+    if (audioListeners.current[suktaKey]) {
+      const existing = audioListeners.current[suktaKey];
+      audio.removeEventListener("loadedmetadata", existing.loadedmetadata);
+      audio.removeEventListener("timeupdate", existing.timeupdate);
+      audio.removeEventListener("ended", existing.ended);
+      delete audioListeners.current[suktaKey];
+    }
+
+    const handleTimeUpdate = () => {
+      if (audio) {
+        setAudioProgress((prev) => ({
+          ...prev,
+          [suktaKey]: {
+            currentTime: audio.currentTime,
+            duration: audio.duration || (prev[suktaKey]?.duration || null),
+          },
+        }));
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      if (audio) {
+        setAudioProgress((prev) => ({
+          ...prev,
+          [suktaKey]: {
+            currentTime: audio.currentTime,
+            duration: audio.duration,
+          },
+        }));
+      }
+    };
+
+    const handleEnded = () => {
+      setIsPlaying((prev) => ({ ...prev, [suktaKey]: false }));
+      const listeners = audioListeners.current[suktaKey];
+      if (listeners && audio) {
+        audio.removeEventListener("timeupdate", listeners.timeupdate);
+        audio.removeEventListener("ended", listeners.ended);
+        audio.removeEventListener("loadedmetadata", listeners.loadedmetadata);
+        delete audioListeners.current[suktaKey];
+      }
+      setAudioProgress((prev) => ({
+        ...prev,
+        [suktaKey]: {
+          currentTime: 0,
+          duration: audio?.duration || null,
+        },
+      }));
+    };
+
+    audioListeners.current[suktaKey] = {
+      timeupdate: handleTimeUpdate,
+      loadedmetadata: handleLoadedMetadata,
+      ended: handleEnded,
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+
+    audio.currentTime = 0;
+    audio
+      .play()
+      .catch((err) => {
+        toast({
+          title: "Playback Failed",
+          description: err.message,
+          variant: "destructive",
+        });
+      });
+    setIsPlaying((prev) => ({ ...prev, [suktaKey]: true }));
+  }, [isPlaying, toast]);
+
   const handleTranslate = async (verse: RigvedaVerse, index: number) => {
     const groqKey = import.meta.env.VITE_GROQ_API_KEY;
 
@@ -141,7 +287,8 @@ const Search = () => {
       "Hindi (हिंदी)": "Hindi",
       "Marathi (मराठी)": "Marathi",
       "Tamil (தமிழ்)": "Tamil",
-      "Telugu (తెలుగు)": "Telugu"
+      "Telugu (తెలుగు)": "Telugu",
+      "Bengali (বাংলা)":"Bengali",
     };
 
     const targetLang = langMap[translationLang];
@@ -165,7 +312,7 @@ CRITICAL INSTRUCTIONS:
 1. Translate the ENGLISH text below into ${targetLang}
 2. Maintain the poetic and devotional, respected tone. We are referring to Gods in here.
 3. Use natural ${targetLang} grammar and sentence structure
-4. Write in proper ${targetLang} script (Devanagari for Hindi/Marathi, Tamil/Telugu scripts)
+4. Write in proper ${targetLang} script (Devanagari for Hindi/Marathi, Tamil/Telugu/Bengali scripts)
 5. DO NOT transliterate Sanskrit - translate the English meaning
 6. Keep the literary quality of the original English
 7. Provide ONLY the ${targetLang} translation - no explanations
@@ -338,6 +485,7 @@ Now provide a natural, literary ${targetLang} translation:`;
                   <SelectItem value="Marathi (मराठी)">Marathi (मराठी)</SelectItem>
                   <SelectItem value="Tamil (தமிழ்)">Tamil (தமிழ்)</SelectItem>
                   <SelectItem value="Telugu (తెలుగు)">Telugu (తెలుగు)</SelectItem>
+                  <SelectItem value="Bengali (বাংলা)">Bengali (বাংলা)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -415,85 +563,129 @@ Now provide a natural, literary ${targetLang} translation:`;
           <p className="text-muted-foreground">No verses found. Try different search criteria.</p>
         </Card>
       ) : (
-        paginatedResults.map((verse, idx) => (
-          <Card key={`${startIdx + idx}-${verse.mandala || 'x'}.${verse.sukta || 'x'}.${verse.verse || 'x'}`} className="verse-card mb-6">
-            <CardContent className="pt-6">
-              {/* Reference */}
-              <div className="font-semibold mb-4 text-primary font-devanagari">
-                मण्डल {verse.mandala} • सूक्त {verse.sukta} • ऋचा {verse.verse}
-              </div>
+        paginatedResults.map((verse, idx) => {
+          const suktaKey = `${verse.mandala}.${verse.sukta}`;
+          const progress = audioProgress[suktaKey];
+          const duration = progress?.duration;
+          const currentTime = progress?.currentTime || 0;
+          const percent = duration ? (currentTime / duration) * 100 : 0;
+          return (
+            <Card key={`${startIdx + idx}-${verse.mandala || 'x'}.${verse.sukta || 'x'}.${verse.verse || 'x'}`} className="verse-card mb-6">
+              <CardContent className="pt-6">
+                {/* Reference */}
+                <div className="font-semibold mb-4 text-primary font-devanagari">
+                  मण्डल {verse.mandala} • सूक्त {verse.sukta} • ऋचा {verse.verse}
+                </div>
 
-              {/* Metadata */}
-              <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">🙏 देवता:</span>{" "}
-                  <span className="font-devanagari">{verse.deity}</span>
+                {/* Metadata */}
+                <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">🙏 देवता:</span>{" "}
+                    <span className="font-devanagari">{verse.deity}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">👤 ऋषि/कुल:</span>{" "}
+                    <span className="font-devanagari">{verse.rishi}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">📏 छन्द:</span>{" "}
+                    <span className="font-devanagari">{verse.meter}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">👤 ऋषि/कुल:</span>{" "}
-                  <span className="font-devanagari">{verse.rishi}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">📏 छन्द:</span>{" "}
-                  <span className="font-devanagari">{verse.meter}</span>
-                </div>
-              </div>
 
-              {/* Sanskrit Text */}
-              <div className="sanskrit-text bg-verse-bg rounded-lg p-4 mb-4 font-devanagari text-xl md:text-2xl leading-relaxed">
-                {verse.sanskrit}
-              </div>
-
-              {/* English Translation */}
-              {translationLang === "English (Griffith)" ? (
-                <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
-                  <div className="font-semibold mb-2">English Translation (Griffith):</div>
-                  {verse.english_translation}
+                {/* Sanskrit Text with Transliteration and Audio Controls */}
+                <div className="sanskrit-text bg-verse-bg rounded-lg p-4 mb-4 font-devanagari leading-relaxed relative">
+                  <div className="text-xl md:text-2xl mb-2">
+                      {verse.sanskrit}
+                  </div>
+                  {verse.transliteration && (
+                      <div className="text-md font-mono text-muted-foreground">
+                          {verse.transliteration}
+                      </div>
+                  )}
+                  {/* Audio Controls - positioned at bottom right */}
+                  <div className="absolute bottom-2 right-2 flex flex-col items-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAudioToggle(verse)}
+                      className="h-8 w-8 p-0 rounded-full bg-primary/10 hover:bg-primary/20"
+                      title={`Listen to Sukta ${verse.mandala}.${verse.sukta} audio`}
+                    >
+                      {isPlaying[suktaKey] ? (
+                        <Pause className="h-4 w-4 text-red-500" />
+                      ) : (
+                        <Volume2 className="h-4 w-4 text-red-500" />
+                      )}
+                    </Button>
+                    {isPlaying[suktaKey] && duration && !isNaN(duration) && (
+                      <input
+                        type="range"
+                        min="0"
+                        max={duration}
+                        value={currentTime}
+                        onChange={(e) => handleSeek(suktaKey, parseFloat(e.target.value))}
+                        className="w-20 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                        style={{
+                          background: `linear-gradient(to right, #3b82f6 ${percent}%, #e5e7eb ${percent}%)`,
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400 mb-3">
+
+                {/* English Translation */}
+                {translationLang === "English (Griffith)" ? (
+                  <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
                     <div className="font-semibold mb-2">English Translation (Griffith):</div>
                     {verse.english_translation}
                   </div>
+                ) : (
+                  <>
+                    <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400 mb-3">
+                      <div className="font-semibold mb-2">English Translation (Griffith):</div>
+                      {verse.english_translation}
+                    </div>
 
-                  {(() => {
-                    const langMap: Record<string, string> = {
-                      "Hindi (हिंदी)": "Hindi",
-                      "Marathi (मराठी)": "Marathi",
-                      "Tamil (தமிழ்)": "Tamil",
-                      "Telugu (తెలుగు)": "Telugu"
-                    };
-                    const targetLang = langMap[translationLang];
-                    const verseKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
+                    {(() => {
+                      const langMap: Record<string, string> = {
+                        "Hindi (हिंदी)": "Hindi",
+                        "Marathi (मराठी)": "Marathi",
+                        "Tamil (தமிழ்)": "Tamil",
+                        "Telugu (తెలుగు)": "Telugu",
+                        "Bengali (বাংলা)": "Bengali",
+                      };
+                      const targetLang = langMap[translationLang];
+                      const verseKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
 
-                    return translations[verseKey] ? (
-                      <div className="translation-text bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border-l-4 border-green-400">
-                        <div className="font-semibold mb-2">{translationLang} Translation:</div>
-                        {translations[verseKey]}
-                      </div>
-                    ) : (
-                      <Button
-                        onClick={() => handleTranslate(verse, startIdx + idx)}
-                        disabled={translating === verseKey}
-                        className="w-full"
-                      >
-                        {translating === verseKey ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Translating to {translationLang}...
-                          </>
-                        ) : (
-                          <>🌐 Translate to {translationLang}</>
-                        )}
-                      </Button>
-                    );
-                  })()}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        ))
+                      return translations[verseKey] ? (
+                        <div className="translation-text bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border-l-4 border-green-400">
+                          <div className="font-semibold mb-2">{translationLang} Translation:</div>
+                          {translations[verseKey]}
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={() => handleTranslate(verse, startIdx + idx)}
+                          disabled={translating === verseKey}
+                          className="w-full"
+                        >
+                          {translating === verseKey ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Translating to {translationLang}...
+                            </>
+                          ) : (
+                            <>🌐 Translate to {translationLang}</>
+                          )}
+                        </Button>
+                      );
+                    })()}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })
       )}
 
       {/* Famous Mantras Section */}
@@ -501,7 +693,7 @@ Now provide a natural, literary ${targetLang} translation:`;
         <div className="border-t border-border mb-8" />
         <h2 className="text-3xl font-bold mb-3">📚 Famous Mantras from Rigveda</h2>
         <p className="text-muted-foreground mb-6">Discover the origins of mantras used in daily worship</p>
-        
+
         <div className="grid md:grid-cols-2 gap-4">
           {Object.entries(FAMOUS_MANTRAS).map(([name, mantra]) => (
             <Card key={name} className="hover:shadow-lg transition-shadow">

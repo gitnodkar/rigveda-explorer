@@ -167,7 +167,7 @@ export const FAMOUS_MANTRAS = {
 
 // Rivers mentioned in Rigveda
 export const RIVERS: Record<string, string[]> = {
-  "Sarasvati": ["सरस्वत", "Sarasvatî"],
+  "Sarasvati": ["Sarasvat"],
   "Sindhu (Indus, SaptaSindhu, River)": ["सिन्ध"],
   "Ganga": ["गङ्गा", "Gangâ"],
   "Yamuna": ["यमुना", "Yamunâ"],
@@ -217,7 +217,11 @@ export function getEnglishMeter(sanskrit: string): string {
 
 export function removeDiacritics(text: string): string {
   if (!text) return "";
-  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC');
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')  // Latin diacritics (for transliteration)
+    .replace(/[\u0951-\u0954\u1CD0-\u1CFF]/g, '')  // Devanagari Vedic signs (U+0951–0954) + Vedic extensions (e.g., U+1CD9 for ᳚)
+    .normalize('NFC');
 }
 
 // Get unique options for dropdowns

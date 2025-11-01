@@ -7,6 +7,7 @@ export interface RigvedaVerse {
   meter: string;
   sanskrit: string;
   english_translation: string;
+  transliteration: string;
 }
 
 export type SearchType = "Deity" | "Rishi/Clan" | "Meter" | "Mandala" | "Keyword/Verse Reference";

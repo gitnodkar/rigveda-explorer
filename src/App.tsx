@@ -9,6 +9,7 @@ import Search from "./pages/Search";
 import Visualize from "./pages/Visualize";
 import AI from "./pages/AI";
 import NotFound from "./pages/NotFound";
+import PlacesMap from "./pages/PlacesMap";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/search" element={<Search />} />
             <Route path="/visualize" element={<Visualize />} />
             <Route path="/ai" element={<AI />} />
+            <Route path="/places" element={<PlacesMap />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

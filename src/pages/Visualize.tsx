@@ -135,6 +135,16 @@ const Visualize = () => {
       }));
   }, [data]);
 
+  // Mandala totals for share calculations
+  const mandalaTotals = useMemo(() => {
+    const totals: Record<number, number> = {};
+    mandalaData.forEach(({ name, verses }) => {
+      const num = parseInt(name.split(" ")[1]);
+      totals[num] = verses;
+    });
+    return totals;
+  }, [mandalaData]);
+
   const deityData = useMemo(() => {
     const counts: Record<string, number> = {};
     const deityGroups: Record<string, string[]> = {};
@@ -241,21 +251,22 @@ const Visualize = () => {
     return categoryData.slice(0, limit).map((d) => d.name);
   };
 
-  // Helper: Compute sub-data for line chart (Mandala distro)
-  const getSubData = (
+  // Helper: Compute distribution data for line chart (Mandala distro) - % of item's total across mandalas
+  const getDistributionData = (
     selectedValues: string[],
     aggKey: keyof typeof aggregatedData
   ) => {
     if (selectedValues.length === 0) return [];
 
-    const totalSelected = selectedValues.reduce((sum, val) => {
-      return (
-        sum +
-        Object.values(aggregatedData[aggKey]).reduce((acc, m) => acc + (m[val] || 0), 0)
-      );
-    }, 0);
+    // Compute per-item totals across all mandalas
+    const itemTotals: Record<string, number> = {};
+    selectedValues.forEach((val) => {
+      itemTotals[val] = Object.values(aggregatedData[aggKey]).reduce((acc, m) => acc + (m[val] || 0), 0);
+    });
 
-    if (totalSelected === 0) return [];
+    // Filter out items with zero total
+    const validValues = selectedValues.filter(val => itemTotals[val] > 0);
+    if (validValues.length === 0) return [];
 
     // Always generate all 10 Mandalas, no filtering
     return Array.from({ length: 10 }, (_, i) => {
@@ -263,14 +274,43 @@ const Visualize = () => {
       const entry: Record<string, number> = {
         mandala,
         name: `M${mandala}`, // Shorter label to fit
-        ...selectedValues.reduce((acc, val) => {
-          const count = aggregatedData[aggKey][mandala]?.[val] || 0;
-          acc[val] = totalSelected > 0 ? ((count / totalSelected) * 100) : 0;
-          return acc;
-        }, {} as Record<string, number>)
       };
+      validValues.forEach((val) => {
+        const count = aggregatedData[aggKey][mandala]?.[val] || 0;
+        const itemTotal = itemTotals[val];
+        entry[val] = itemTotal > 0 ? ((count / itemTotal) * 100) : 0;
+      });
       return entry;
-    }); // No .filter() - always show all 10
+    });
+  };
+
+  // Helper: Compute share data for line chart - % of mandala dedicated to each item
+  const getShareData = (
+    selectedValues: string[],
+    aggKey: keyof typeof aggregatedData
+  ) => {
+    if (selectedValues.length === 0) return [];
+
+    // Filter out items with zero counts anywhere
+    const validValues = selectedValues.filter(val =>
+      Object.values(aggregatedData[aggKey]).some(m => m[val] > 0)
+    );
+    if (validValues.length === 0) return [];
+
+    // Always generate all 10 Mandalas, no filtering
+    return Array.from({ length: 10 }, (_, i) => {
+      const mandala = i + 1;
+      const totalVerses = mandalaTotals[mandala] || 0;
+      const entry: Record<string, number> = {
+        mandala,
+        name: `M${mandala}`,
+      };
+      validValues.forEach((val) => {
+        const count = aggregatedData[aggKey][mandala]?.[val] || 0;
+        entry[val] = totalVerses > 0 ? ((count / totalVerses) * 100) : 0;
+      });
+      return entry;
+    });
   };
 
   // Initialize selected on expand (default all top 10)
@@ -359,19 +399,19 @@ const Visualize = () => {
             <div className="text-3xl font-bold text-primary mb-1">
               {suktaCount.toLocaleString()}
             </div>
-            <div className="text-xs text-muted-foreground">Suktas</div>
-          </CardContent>
-        </Card>
-        <Card className="stats-box">
-          <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-primary mb-1">33</div>
-            <div className="text-xs text-muted-foreground">Total Deities</div>
+            <div className="text-xs text-muted-foreground">Total Suktas</div>
           </CardContent>
         </Card>
         <Card className="stats-box">
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-primary mb-1">10</div>
             <div className="text-xs text-muted-foreground">Mandalas</div>
+          </CardContent>
+        </Card>
+        <Card className="stats-box">
+          <CardContent className="pt-6">
+            <div className="text-3xl font-bold text-primary mb-1">33</div>
+            <div className="text-xs text-muted-foreground">Total Deities</div>
           </CardContent>
         </Card>
         <Card className="stats-box">
@@ -439,10 +479,10 @@ const Visualize = () => {
               </BarChart>
             </ResponsiveContainer>
             {expandedViz === "deities" && (
-              <div className="mt-4 p-4 bg-muted rounded-lg"> {/* Removed max-h-96 overflow-y-auto */}
+              <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="mb-4">
                   <h4 className="font-semibold mb-2">Select Deities (Top 10)</h4>
-                  <div className="grid grid-cols-2 gap-4"> {/* 2 cols, gap for space utilization */}
+                  <div className="grid grid-cols-2 gap-4">
                     {getTopValues(deityData, 10).map((name) => (
                       <div key={name} className="flex items-center space-x-2">
                         <Checkbox
@@ -455,35 +495,72 @@ const Visualize = () => {
                     ))}
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={getSubData(selectedDeities, "deities")}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      interval={0} // Show all ticks
-                      angle={-45} // Rotate for fit
-                      textAnchor="end"
-                      height={70}
-                      className="text-xs"
-                    />
-                    <YAxis unit="%" />
-                    <Tooltip formatter={(value) => [`${value.toFixed(2)}%`, "Percentage"]} />
-                    <Legend />
-                    {selectedDeities.map((val, i) => (
-                      <Line
-                        key={val}
-                        type="monotone"
-                        dataKey={val}
-                        stroke={COLORS[i % COLORS.length]}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Distribution (% of selected deities) across Mandalas.
-                </p>
+                <div className="space-y-4">
+                  <div>
+                    <h5 className="font-medium mb-2">Distribution Across Mandalas</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getDistributionData(selectedDeities, "deities")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedDeities.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each deity's total mentions across all mandalas (sums to 100% per line).
+                    </p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium mb-2">Share Within Each Mandala</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getShareData(selectedDeities, "deities")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedDeities.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each mandala's verses mentioning the selected deities (may sum &gt;100% due to overlaps).
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -512,10 +589,10 @@ const Visualize = () => {
               </BarChart>
             </ResponsiveContainer>
             {expandedViz === "rishis" && (
-              <div className="mt-4 p-4 bg-muted rounded-lg"> {/* Removed max-h-96 overflow-y-auto */}
+              <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="mb-4">
                   <h4 className="font-semibold mb-2">Select Rishis (Top 10)</h4>
-                  <div className="grid grid-cols-2 gap-4"> {/* 2 cols, gap for space utilization */}
+                  <div className="grid grid-cols-2 gap-4">
                     {getTopValues(rishiData, 10).map((name) => (
                       <div key={name} className="flex items-center space-x-2">
                         <Checkbox
@@ -528,35 +605,72 @@ const Visualize = () => {
                     ))}
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={getSubData(selectedRishis, "rishis")}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      interval={0} // Show all ticks
-                      angle={-45} // Rotate for fit
-                      textAnchor="end"
-                      height={70}
-                      className="text-xs"
-                    />
-                    <YAxis unit="%" />
-                    <Tooltip formatter={(value) => [`${value.toFixed(2)}%`, "Percentage"]} />
-                    <Legend />
-                    {selectedRishis.map((val, i) => (
-                      <Line
-                        key={val}
-                        type="monotone"
-                        dataKey={val}
-                        stroke={COLORS[i % COLORS.length]}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Distribution (% of selected rishis) across Mandalas.
-                </p>
+                <div className="space-y-4">
+                  <div>
+                    <h5 className="font-medium mb-2">Distribution Across Mandalas</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getDistributionData(selectedRishis, "rishis")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedRishis.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each rishi's total mentions across all mandalas (sums to 100% per line).
+                    </p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium mb-2">Share Within Each Mandala</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getShareData(selectedRishis, "rishis")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedRishis.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each mandala's verses mentioning the selected rishis (may sum &gt;100% due to overlaps).
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -585,10 +699,10 @@ const Visualize = () => {
               </BarChart>
             </ResponsiveContainer>
             {expandedViz === "meters" && (
-              <div className="mt-4 p-4 bg-muted rounded-lg"> {/* Removed max-h-96 overflow-y-auto */}
+              <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="mb-4">
                   <h4 className="font-semibold mb-2">Select Meters (Top 10)</h4>
-                  <div className="grid grid-cols-2 gap-4"> {/* 2 cols, gap for space utilization */}
+                  <div className="grid grid-cols-2 gap-4">
                     {getTopValues(meterData, 10).map((name) => (
                       <div key={name} className="flex items-center space-x-2">
                         <Checkbox
@@ -601,35 +715,72 @@ const Visualize = () => {
                     ))}
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={getSubData(selectedMeters, "meters")}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      interval={0} // Show all ticks
-                      angle={-45} // Rotate for fit
-                      textAnchor="end"
-                      height={70}
-                      className="text-xs"
-                    />
-                    <YAxis unit="%" />
-                    <Tooltip formatter={(value) => [`${value.toFixed(2)}%`, "Percentage"]} />
-                    <Legend />
-                    {selectedMeters.map((val, i) => (
-                      <Line
-                        key={val}
-                        type="monotone"
-                        dataKey={val}
-                        stroke={COLORS[i % COLORS.length]}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Distribution (% of selected meters) across Mandalas.
-                </p>
+                <div className="space-y-4">
+                  <div>
+                    <h5 className="font-medium mb-2">Distribution Across Mandalas</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getDistributionData(selectedMeters, "meters")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedMeters.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each meter's total mentions across all mandalas (sums to 100% per line).
+                    </p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium mb-2">Share Within Each Mandala</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getShareData(selectedMeters, "meters")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedMeters.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each mandala's verses using the selected meters (may sum &gt;100% due to overlaps).
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -658,10 +809,10 @@ const Visualize = () => {
               </BarChart>
             </ResponsiveContainer>
             {expandedViz === "rivers" && (
-              <div className="mt-4 p-4 bg-muted rounded-lg"> {/* Removed max-h-96 overflow-y-auto */}
+              <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="mb-4">
                   <h4 className="font-semibold mb-2">Select Rivers (Top 10)</h4>
-                  <div className="grid grid-cols-2 gap-4"> {/* 2 cols, gap for space utilization */}
+                  <div className="grid grid-cols-2 gap-4">
                     {getTopValues(riverData, 10).map((name) => (
                       <div key={name} className="flex items-center space-x-2">
                         <Checkbox
@@ -674,35 +825,72 @@ const Visualize = () => {
                     ))}
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={getSubData(selectedRivers, "rivers")}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      interval={0} // Show all ticks
-                      angle={-45} // Rotate for fit
-                      textAnchor="end"
-                      height={70}
-                      className="text-xs"
-                    />
-                    <YAxis unit="%" />
-                    <Tooltip formatter={(value) => [`${value.toFixed(2)}%`, "Percentage"]} />
-                    <Legend />
-                    {selectedRivers.map((val, i) => (
-                      <Line
-                        key={val}
-                        type="monotone"
-                        dataKey={val}
-                        stroke={COLORS[i % COLORS.length]}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Distribution (% of selected rivers) across Mandalas.
-                </p>
+                <div className="space-y-4">
+                  <div>
+                    <h5 className="font-medium mb-2">Distribution Across Mandalas</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getDistributionData(selectedRivers, "rivers")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedRivers.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each river's total mentions across all mandalas (sums to 100% per line).
+                    </p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium mb-2">Share Within Each Mandala</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getShareData(selectedRivers, "rivers")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedRivers.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each mandala's verses mentioning the selected rivers (may sum &gt;100% due to overlaps).
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -731,10 +919,10 @@ const Visualize = () => {
               </BarChart>
             </ResponsiveContainer>
             {expandedViz === "tribes" && (
-              <div className="mt-4 p-4 bg-muted rounded-lg"> {/* Removed max-h-96 overflow-y-auto */}
+              <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="mb-4">
                   <h4 className="font-semibold mb-2">Select Tribes (Top 10)</h4>
-                  <div className="grid grid-cols-2 gap-4"> {/* 2 cols, gap for space utilization */}
+                  <div className="grid grid-cols-2 gap-4">
                     {getTopValues(tribeData, 10).map((name) => (
                       <div key={name} className="flex items-center space-x-2">
                         <Checkbox
@@ -747,35 +935,72 @@ const Visualize = () => {
                     ))}
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={getSubData(selectedTribes, "tribes")}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      interval={0} // Show all ticks
-                      angle={-45} // Rotate for fit
-                      textAnchor="end"
-                      height={70}
-                      className="text-xs"
-                    />
-                    <YAxis unit="%" />
-                    <Tooltip formatter={(value) => [`${value.toFixed(2)}%`, "Percentage"]} />
-                    <Legend />
-                    {selectedTribes.map((val, i) => (
-                      <Line
-                        key={val}
-                        type="monotone"
-                        dataKey={val}
-                        stroke={COLORS[i % COLORS.length]}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Distribution (% of selected tribes) across Mandalas.
-                </p>
+                <div className="space-y-4">
+                  <div>
+                    <h5 className="font-medium mb-2">Distribution Across Mandalas</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getDistributionData(selectedTribes, "tribes")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedTribes.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each tribe's total mentions across all mandalas (sums to 100% per line).
+                    </p>
+                  </div>
+                  <div>
+                    <h5 className="font-medium mb-2">Share Within Each Mandala</h5>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={getShareData(selectedTribes, "tribes")}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={70}
+                          className="text-xs"
+                        />
+                        <YAxis unit="%" />
+                        <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name || "Percentage"]} />
+                        <Legend />
+                        {selectedTribes.map((val, i) => (
+                          <Line
+                            key={val}
+                            type="monotone"
+                            dataKey={val}
+                            stroke={COLORS[i % COLORS.length]}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      % of each mandala's verses mentioning the selected tribes (may sum &gt;100% due to overlaps).
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -786,7 +1011,7 @@ const Visualize = () => {
       <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">
-            <strong>Note:</strong> Counts include all verses with any matching variant, including partial matches, for deities, rishis, and meters.
+            <strong>Note:</strong> Counts include all verses with any matching variant, including partial matches, for deities, rishis, and meters. Rivers and tribes are keyword-based mentions.
           </p>
         </CardContent>
       </Card>
