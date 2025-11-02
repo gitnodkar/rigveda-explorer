@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { RigvedaVerse } from "@/types/rigveda";
-import { MapContainer, TileLayer, Marker, Popup, LayersControl, LayerGroup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, LayersControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { AlertTriangle, Loader2, Search, Filter, ChevronLeft, MapPin, Users, Mountain, AlertCircle } from "lucide-react";
@@ -126,6 +126,50 @@ const PlacesMap = () => {
     }
   }, [filteredPlaces]);
 
+  // Custom double right-click to zoom out (fixed logic)
+  useEffect(() => {
+    const mapInstance = mapRef.current;
+    if (!mapInstance) return;
+
+    const mapEl = mapInstance.getContainer();
+    let clickCount = 0;
+    let clickTimer: NodeJS.Timeout | null = null;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 2) return; // Only right mouse button
+
+      e.preventDefault(); // Prevent context menu
+
+      clickCount += 1;
+
+      if (clickCount === 1) {
+        clickTimer = setTimeout(() => {
+          // Single right-click: Do nothing
+          clickCount = 0;
+        }, 250);
+      } else if (clickCount === 2) {
+        clearTimeout(clickTimer!);
+        // Double right-click: Zoom out
+        const latlng = mapInstance.mouseEventToLatLng(e);
+        mapInstance.zoomOut(latlng, 1);
+        clickCount = 0;
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault(); // Prevent default context menu on right-click
+    };
+
+    mapEl.addEventListener('mousedown', handleMouseDown);
+    mapEl.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      mapEl.removeEventListener('mousedown', handleMouseDown);
+      mapEl.removeEventListener('contextmenu', handleContextMenu);
+      if (clickTimer) clearTimeout(clickTimer);
+    };
+  }, [mapRef]);
+
   // Click handler to center and select
   const handlePlaceClick = (place: any) => {
     if (mapRef.current) {
@@ -217,7 +261,7 @@ const PlacesMap = () => {
                     <div className="font-medium">{place.name}</div>
                     <div className="text-xs text-muted-foreground">{place.type}</div>
                     {place.uncertainty && (
-                      <AlertCircle className="h-3 w-3 text-yellow-500 inline ml-1" />
+                      <AlertTriangle className="h-3 w-3 text-yellow-500 inline ml-1" />
                     )}
                   </div>
                 </div>
@@ -231,121 +275,87 @@ const PlacesMap = () => {
 
         {/* Map */}
         <div className="flex-1">
-          <MapContainer
-            center={[30, 75]}
-            zoom={6}
-            style={{ height: "600px", width: "100%", minWidth: "600px" }}
-            bounds={[[25, 65], [40, 85]]}
-            ref={mapRef}
-          >
-            <LayersControl position="topright">
-              {/* Base Layers */}
-              <LayersControl.BaseLayer name="Default" checked>
-                <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                />
-              </LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Terrain">
-                <TileLayer
-                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
-                  attribution='&copy; <a href="https://www.esri.com/">Esri</a> | <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                />
-              </LayersControl.BaseLayer>
+          <div className="relative z-0">
+            <MapContainer
+              center={[30, 75]}
+              zoom={6}
+              style={{
+                height: "600px",
+                width: "100%",
+                minWidth: "600px",
+                position: "relative",
+                zIndex: 0
+              }}
+              bounds={[[25, 65], [40, 85]]}
+              ref={mapRef}
+            >
+              <LayersControl position="topright">
+                {/* Base Layers Only */}
+                <LayersControl.BaseLayer name="Default" checked>
+                  <TileLayer
+                    url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                  />
+                </LayersControl.BaseLayer>
+                <LayersControl.BaseLayer name="Terrain">
+                  <TileLayer
+                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+                    attribution='&copy; <a href="https://www.esri.com/">Esri</a> | <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  />
+                </LayersControl.BaseLayer>
+                <LayersControl.BaseLayer name="Satellite">
+                  <TileLayer
+                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    attribution='&copy; <a href="https://www.esri.com/">Esri</a> | <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.esri.com/legal/conditions-of-use">Terms & Feedback</a>'
+                    maxZoom={19}
+                  />
+                </LayersControl.BaseLayer>
+              </LayersControl>
 
-              {/* Overlays */}
-              <LayersControl.Overlay name="🌊 Rivers" checked>
-                <LayerGroup>
-                  {filteredPlaces.filter(p => p.type === 'river').map((place, idx) => (
-                    <Marker
-                      key={`river-${idx}`}
-                      position={[place.lat, place.lng]}
-                      icon={getCustomIcon('river')}
-                      eventHandlers={{
-                        click: () => setSelectedPlace(place),
-                      }}
-                    >
-                      <Popup maxWidth={350} className="custom-popup">
-                        <div>
-                          <h3 className="font-bold flex items-center gap-2 mb-2 text-lg">
-                            <MapPin className="h-5 w-5 text-blue-500" />
-                            {place.name} (River)
-                          </h3>
-                          {place.uncertainty && (
-                            <div className="flex items-center gap-1 text-yellow-600 text-sm mb-2 p-2 bg-yellow-50 rounded">
-                              <AlertTriangle className="h-4 w-4" />
-                              {place.desc}
-                            </div>
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </LayerGroup>
-              </LayersControl.Overlay>
-              <LayersControl.Overlay name="👥 Tribes" checked>
-                <LayerGroup>
-                  {filteredPlaces.filter(p => p.type === 'tribe').map((place, idx) => (
-                    <Marker
-                      key={`tribe-${idx}`}
-                      position={[place.lat, place.lng]}
-                      icon={getCustomIcon('tribe')}
-                      eventHandlers={{ click: () => setSelectedPlace(place) }}
-                    >
-                      <Popup maxWidth={350}>
-                        <div>
-                          <h3 className="font-bold flex items-center gap-2 mb-2 text-lg">
-                            <Users className="h-5 w-5 text-green-500" />
-                            {place.name} (Tribe)
-                          </h3>
-                          {place.uncertainty && (
-                            <div className="flex items-center gap-1 text-yellow-600 text-sm mb-2 p-2 bg-yellow-50 rounded">
-                              <AlertTriangle className="h-4 w-4" />
-                              {place.desc}
-                            </div>
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </LayerGroup>
-              </LayersControl.Overlay>
-              <LayersControl.Overlay name="⛰️ Mountains" checked>
-                <LayerGroup>
-                  {filteredPlaces.filter(p => p.type === 'mountain').map((place, idx) => (
-                    <Marker
-                      key={`mountain-${idx}`}
-                      position={[place.lat, place.lng]}
-                      icon={getCustomIcon('mountain')}
-                      eventHandlers={{ click: () => setSelectedPlace(place) }}
-                    >
-                      <Popup maxWidth={350}>
-                        <div>
-                          <h3 className="font-bold flex items-center gap-2 mb-2 text-lg">
-                            <Mountain className="h-5 w-5 text-gray-600" />
-                            {place.name} (Mountain)
-                          </h3>
-                          {place.uncertainty && (
-                            <div className="flex items-center gap-1 text-yellow-600 text-sm mb-2 p-2 bg-yellow-50 rounded">
-                              <AlertTriangle className="h-4 w-4" />
-                              {place.desc}
-                            </div>
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </LayerGroup>
-              </LayersControl.Overlay>
-            </LayersControl>
-          </MapContainer>
+              {/* Markers rendered directly, controlled by filters */}
+              {filteredPlaces.map((place) => {
+                const icon = getCustomIcon(place.type);
+                const isRiver = place.type === 'river';
+                const isTribe = place.type === 'tribe';
+                const isMountain = place.type === 'mountain';
+
+                return (
+                  <Marker
+                    key={`${place.type}-${place.name}`}
+                    position={[place.lat, place.lng]}
+                    icon={icon}
+                    eventHandlers={{
+                      click: () => setSelectedPlace(place),
+                    }}
+                  >
+                    <Popup maxWidth={350} className="custom-popup">
+                      <div>
+                        <h3 className="font-bold flex items-center gap-2 mb-2 text-lg">
+                          {isRiver && <MapPin className="h-5 w-5 text-blue-500" />}
+                          {isTribe && <Users className="h-5 w-5 text-green-500" />}
+                          {isMountain && <Mountain className="h-5 w-5 text-gray-600" />}
+                          {place.name} ({place.type.charAt(0).toUpperCase() + place.type.slice(1)})
+                        </h3>
+                        {place.uncertainty && (
+                          <div className="flex items-center gap-1 text-yellow-600 text-sm mb-2 p-2 bg-yellow-50 rounded">
+                            <AlertTriangle className="h-4 w-4" />
+                            {place.desc}
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MapContainer>
+          </div>
         </div>
       </div>
 
       {/* Legend */}
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Legend & Insights</CardTitle>
+          <CardTitle>Legend</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid md:grid-cols-3 gap-4 mb-4">
@@ -363,10 +373,10 @@ const PlacesMap = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm text-yellow-600 mb-2">
-            <AlertTriangle className="h-4 w-4" />
-            <span>Yellow alert: Debated or mythical location.</span>
+            <AlertTriangle className="h-6 w-6" />
+            <span>Yellow alert triangle: Debated or mythical location.</span>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="pt-5 text-sm text-muted-foreground">
             Coordinates refined from Wikipedia/Dharmawiki. Zoom/pan to explore the Vedic heartland!
           </p>
         </CardContent>
