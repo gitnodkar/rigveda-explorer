@@ -1,11 +1,13 @@
-// layout.tsx
+// layout.tsx (updated)
 import { Link, useLocation } from "react-router-dom";
-import { Home, Search, BarChart3, MessageCircle, HelpCircle, Map } from "lucide-react";
+import { Home, Search, BarChart3, MessageCircle, HelpCircle, Map, Sun, Moon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTheme } from "../theme-context"; // Adjust path as needed
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  
+  const { theme, toggleTheme } = useTheme();
+
   const navItems = [
     { path: "/", label: "Home", icon: Home },
     { path: "/search", label: "Search & Explore", icon: Search },
@@ -54,6 +56,28 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </Tooltip>
           </TooltipProvider>
 
+          {/* Dark Mode Toggle */}
+          <TooltipProvider delayDuration={10}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={toggleTheme}
+                  className="absolute top-6 right-6 w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center cursor-pointer hover:bg-white/30 transition-all duration-300 hover:scale-110"
+                  aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                >
+                  {theme === 'light' ? (
+                    <Moon className="h-5 w-5" />
+                  ) : (
+                    <Sun className="h-5 w-5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                Toggle {theme === 'light' ? 'dark' : 'light'} mode
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <h1 className="text-6xl md:text-7xl font-serif font-family:Times New Roman font-bold mb-4 drop-shadow-2xl tracking-tight">
             Rig Veda Explorer
           </h1>
@@ -97,7 +121,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         {children}
       </main>
 
-      {/* Footer */}
       {/* Footer */}
       <footer className="bg-slate-900 text-white border-t border-slate-800">
         <div className="container mx-auto px-4 py-6">

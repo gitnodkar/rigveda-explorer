@@ -6,7 +6,9 @@ import { Send, Loader2 } from "lucide-react";
 import { chatWithGroqStream, GroqMessage } from "@/lib/groq";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { useToast } from "@/hooks/use-toast";
-import OmImage from "/public/om.png"; // Replace with the path to your custom PNG
+import { useTheme } from "@/theme-context"; // Adjust path as needed
+import OmImage from "/public/om.png"; // Light mode Om
+import OmDarkImage from "/public/om2.png"; // Dark mode Om
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -16,6 +18,7 @@ interface ChatMessage {
 const AI = () => {
   const { data } = useRigvedaData();
   const { toast } = useToast();
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -79,7 +82,40 @@ const AI = () => {
         ).join('\n\n');
       }
     }
+    // Handle famous mantras/suktas by name (bypass text search)
+    const famousMantras = {
+      gayatri: { type: 'verse', mandala: 3, sukta: 62, verse: 10 },
+      purusha: { type: 'sukta', mandala: 10, sukta: 90 },
+      nasadiya: { type: 'sukta', mandala: 10, sukta: 129 },
+      mrityunjaya: { type: 'verse', mandala: 7, sukta: 59, verse: 12 },
+      // Add more as needed, e.g., 'agni': { type: 'sukta', mandala: 1, sukta: 1 }
+    };
 
+    const lowerQueryWords = lowerQuery.split(' '); // Split for multi-word matches like "purusha sukt"
+    for (const [name, info] of Object.entries(famousMantras)) {
+      if (lowerQueryWords.some(word => word.includes(name.replace(' ', ''))) || lowerQuery.includes(name)) {
+        if (info.type === 'verse') {
+          const verse = data.find(row =>
+            parseInt(String(row.mandala)) === info.mandala &&
+            parseInt(String(row.sukta)) === info.sukta &&
+            parseInt(String(row.verse)) === info.verse
+          );
+          if (verse) {
+            return `Verse ${info.mandala}.${info.sukta}.${info.verse}:\nSanskrit: ${verse.sanskrit}\nTransliteration: ${verse.transliteration || 'N/A'}\nEnglish Translation: ${verse.english_translation}\nDeity: ${verse.deity || 'N/A'}\nRishi: ${verse.rishi || 'N/A'}`;
+          }
+        } else if (info.type === 'sukta') {
+          const verses = data.filter(row =>
+            parseInt(String(row.mandala)) === info.mandala &&
+            parseInt(String(row.sukta)) === info.sukta
+          );
+          if (verses.length > 0) {
+            return verses.slice(0, 5).map(v => // Limit to 5 for suktas
+              `Verse ${v.mandala}.${v.sukta}.${v.verse}:\nSanskrit: ${v.sanskrit}\nTransliteration: ${v.transliteration || 'N/A'}\nEnglish Translation: ${v.english_translation}\nDeity: ${v.deity || 'N/A'}\nRishi: ${v.rishi || 'N/A'}`
+            ).join('\n\n---\n\n');
+          }
+        }
+      }
+    }
     // Rigveda-specific keyword search (more targeted to avoid noise)
     // Only match if query contains potential Rigveda terms (deities, concepts) or is substantive
     const rigvedaKeywords = ['agni', 'indra', 'soma', 'varuna', 'rudra', 'vishnu', 'gayatri', 'purusha', 'nasadiya', 'mrityunjaya', 'mantra', 'sukta', 'rishi', 'deity', 'mandala', 'verse', 'sanskrit', 'transliteration', 'translation'];
@@ -251,7 +287,11 @@ The database contains all famous hymns including:
         >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
-              <img src={OmImage} alt="Om Symbol" className="h-24 w-24 mb-4" />
+              <img
+                src={theme === 'dark' ? OmDarkImage : OmImage}
+                alt="Om Symbol"
+                className="h-24 w-24 mb-4"
+              />
               <div>
                 <h2 className="text-2xl font-semibold mb-2">Welcome to AI Scholar</h2>
                 <p className="text-muted-foreground mb-6">Ask me anything about the Rigveda</p>
