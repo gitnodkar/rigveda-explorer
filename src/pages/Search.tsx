@@ -382,7 +382,7 @@ Now provide a natural, literary ${targetLang} translation:`;
           <CardTitle>Search Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-[1fr_2.25fr_0.5fr_1fr] gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Search By</label>
               <Select value={searchType} onValueChange={(val) => {
