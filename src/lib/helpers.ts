@@ -18,35 +18,35 @@ export const MANDALA_INFO: Record<number, string> = {
 
 // Deity mappings (Sanskrit to English)
 export const DEITY_MAPPINGS: Record<string, string> = {
-  "इन्द्रः": "Indra",
-  "इन्द्र:": "Indra",
-  "पवमान: सोम:": "Soma Pavamana",
-  "सोम:": "Soma Pavamana",
-  "अग्निः": "Agni",
-  "अग्नि:": "Agni",
-  "अग्नि ::": "Agni",
+  "इन्द्र": "Indra",
+  "सोम": "Soma Pavamana",
+  "अग्नि": "Agni",
   "अग्नी": "Agni",
   "अश्विनौ": "Ashvins",
-  "विश्वे देवाः": "Vishvedevas",
-  "विश्वेदेवाः": "Vishvedevas",
+  "विश्वे देवा": "Vishvedevas",
+  "विश्वेदेवा": "Vishvedevas",
   "विश्वे देवा:": "Vishvedevas",
-  "मरुतः": "Maruts",
-  "मरुत:": "Maruts",
-  "मित्रावरुणौ": "Mitra-Varuna",
+  "मरुत": "Maruts",
   "मित्रा-वरुणौ": "Mitra-Varuna",
+  "मित्रवरुण": "Mitra-Varuna",
+  "मित्रावरुण": "Mitra-Varuna",
   "इन्द्राग्नी": "Indra-Agni",
   "इन्द्रावरुणौ": "Indra-Varuna",
-  "उषाः": "Ushas",
-  "उषस:": "Ushas",
-  "ऋभवः": "Ribhus",
+  "उषा": "Ushas",
+  "उषस": "Ushas",
+  "ऋभव": "Ribhus",
   "सविता": "Savitar",
-  "पूषा": "Pushan",
-  "वायुः": "Vayu",
-  "वायु:": "Vayu",
+  "पूष": "Pushan",
+  "वायु": "Vayu",
   "सूर्य": "Surya",
   "रुद्रः": "Rudra (Shiva)",
-  "रुद्र:": "Rudra (Shiva)",
-  "अश्वः": "Ashva"
+  "रुद्र": "Rudra (Shiva)",
+  "अश्वः": "Ashva",
+  "वरुण:": "Varuna",
+  "वरुण :": "Varuna",
+  "वरुणः": "Varuna",
+  "दित्य": "Adityas",
+  "विष्ण": "Vishnu",
 };
 
 // Rishi mappings (Sanskrit to English)
@@ -174,26 +174,30 @@ export const RIVERS: Record<string, string[]> = {
   "Kubha (Kabul)": ["Kubhâ"],
   "Gomati (Gomal)": ["गोमती", "Gomatî"],
   "Vitasta (Jhelum)": ["वितस्ता", "Vitastâ"],
-  "Parushni (Ravi)": ["परुष्णी", "Parushṇî"],
+  "Parushni (Iravati/Ravi)": ["परुष्णी", "Parushṇî"],
   "Asikni (Chenab)": ["असिक्नी", "Asiknî"],
   "Vipash (Beas)": ["विपाश", "Vipâṣ"],
   "Shutudri (Sutlej)": ["Ṣutudrî"],
   "Marudvridha": ["Marudvr̥idhâ"],
-  "Krumu (Kurram)": ["Krumu"]
+  "Krumu (Kurram)": ["Krumu"],
+  "Anitabha": ["Anitabhâ"],
+  "Sushoma": ["Sushomâ"]
 };
 
 // Tribes mentioned in Rigveda
 export const TRIBES: Record<string, string[]> = {
   "Purus": ["Pûru"],
-  "Turvasas": ["Turvaṣa"],
-  "Yadus": ["Yadu"],
+  "Turvasas": ["Turvaṣa","Turva"],
+  "Yadus": ["Yadu","Yadavas"],
   "Krivis": ["Krivi"],
   "Druhyus": ["Druhyu"],
   "Dasyus": ["Dasyu"],
-  "Anus": ["Anus"],
-  "Bharatas": ["Bharatas"],
+  "Anus": ["Anus","Anu's","Anava"],
+  "Bharatas": ["Bharata"],
   "Alinas": ["Alinas"],
-  "Pakthas": ["Paktha"]
+  "Pakthas": ["Paktha"],
+  "Ikshvakus/Trikshas":["Ikshvâku","Tr̥ikshi"],
+  "Parshus":["Parṣu"]
 };
 
 // Helper functions
