@@ -37,9 +37,11 @@ const Search = () => {
   const [translating, setTranslating] = useState<string | null>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [isPlaying, setIsPlaying] = useState<Record<string, boolean>>({});
+  const [isSeeking, setIsSeeking] = useState<Record<string, boolean>>({});
   const [audioProgress, setAudioProgress] = useState<Record<string, {currentTime: number, duration: number | null}>>({});
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const audioListeners = useRef<Record<string, {timeupdate: () => void, ended: () => void, loadedmetadata: () => void}>>({});
+  const seekInputRefs = useRef<Record<string, HTMLInputElement>>({});
 
   // Filter data based on search criteria
   const filteredData = useMemo(() => {
@@ -172,13 +174,12 @@ const Search = () => {
     const audio = audioRefs.current[suktaKey];
     if (audio) {
       audio.currentTime = value;
-      setAudioProgress((prev) => ({
-        ...prev,
-        [suktaKey]: {
-          ...prev[suktaKey],
-          currentTime: value,
-        },
-      }));
+      const inputEl = seekInputRefs.current[suktaKey];
+      if (inputEl) {
+        inputEl.value = value.toString();
+        const percent = audio.duration ? (value / audio.duration) * 100 : 0;
+        inputEl.style.background = `linear-gradient(to right, #3b82f6 ${percent}%, #e5e7eb ${percent}%)`;
+      }
     }
   }, []);
 
@@ -235,13 +236,15 @@ const Search = () => {
 
     const handleTimeUpdate = () => {
       if (audio) {
-        setAudioProgress((prev) => ({
-          ...prev,
-          [suktaKey]: {
-            currentTime: audio.currentTime,
-            duration: audio.duration || (prev[suktaKey]?.duration || null),
-          },
-        }));
+        if (!isSeeking[suktaKey]) {
+          setAudioProgress((prev) => ({
+            ...prev,
+            [suktaKey]: {
+              currentTime: audio.currentTime,
+              duration: audio.duration || (prev[suktaKey]?.duration || null),
+            },
+          }));
+        }
       }
     };
 
@@ -296,7 +299,7 @@ const Search = () => {
         });
       });
     setIsPlaying((prev) => ({ ...prev, [suktaKey]: true }));
-  }, [isPlaying, toast]);
+  }, [isPlaying, isSeeking, toast]);
 
   const handleTranslate = async (verse: RigvedaVerse) => {
     const groqKey = import.meta.env.VITE_GROQ_API_KEY;
@@ -676,11 +679,40 @@ Now provide a natural, literary ${targetLang} translation:`;
                       </Button>
                       {isPlaying[suktaKey] && duration && !isNaN(duration) && (
                         <input
+                          ref={(el) => seekInputRefs.current[suktaKey] = el}
                           type="range"
                           min="0"
                           max={duration}
                           value={currentTime}
+                          onMouseDown={() => setIsSeeking((prev) => ({ ...prev, [suktaKey]: true }))}
+                          onTouchStart={() => setIsSeeking((prev) => ({ ...prev, [suktaKey]: true }))}
                           onChange={(e) => handleSeek(suktaKey, parseFloat(e.target.value))}
+                          onMouseUp={() => {
+                            setIsSeeking((prev) => ({ ...prev, [suktaKey]: false }));
+                            const audio = audioRefs.current[suktaKey];
+                            if (audio) {
+                              setAudioProgress((prev) => ({
+                                ...prev,
+                                [suktaKey]: {
+                                  currentTime: audio.currentTime,
+                                  duration: audio.duration || prev[suktaKey]?.duration || null,
+                                },
+                              }));
+                            }
+                          }}
+                          onTouchEnd={() => {
+                            setIsSeeking((prev) => ({ ...prev, [suktaKey]: false }));
+                            const audio = audioRefs.current[suktaKey];
+                            if (audio) {
+                              setAudioProgress((prev) => ({
+                                ...prev,
+                                [suktaKey]: {
+                                  currentTime: audio.currentTime,
+                                  duration: audio.duration || prev[suktaKey]?.duration || null,
+                                },
+                              }));
+                            }
+                          }}
                           className="w-20 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
                           style={{
                             background: `linear-gradient(to right, #3b82f6 ${percent}%, #e5e7eb ${percent}%)`,
@@ -763,7 +795,7 @@ Now provide a natural, literary ${targetLang} translation:`;
                       <span className="font-semibold text-primary font-devanagari">
                         {s.mandala}.{s.sukta}
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <span className="text-sm text-muted-foreground">({s.verses.length} verses)</span>
                         <Button
                           variant="ghost"
@@ -783,13 +815,50 @@ Now provide a natural, literary ${targetLang} translation:`;
                         </Button>
                         {isPlaying[suktaKey] && duration && !isNaN(duration) && (
                           <input
+                            ref={(el) => seekInputRefs.current[suktaKey] = el}
                             type="range"
                             min="0"
                             max={duration}
                             value={currentTime}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setIsSeeking((prev) => ({ ...prev, [suktaKey]: true }));
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                              setIsSeeking((prev) => ({ ...prev, [suktaKey]: true }));
+                            }}
                             onChange={(e) => {
                               e.stopPropagation();
                               handleSeek(suktaKey, parseFloat(e.target.value));
+                            }}
+                            onMouseUp={(e) => {
+                              e.stopPropagation();
+                              setIsSeeking((prev) => ({ ...prev, [suktaKey]: false }));
+                              const audio = audioRefs.current[suktaKey];
+                              if (audio) {
+                                setAudioProgress((prev) => ({
+                                  ...prev,
+                                  [suktaKey]: {
+                                    currentTime: audio.currentTime,
+                                    duration: audio.duration || prev[suktaKey]?.duration || null,
+                                  },
+                                }));
+                              }
+                            }}
+                            onTouchEnd={(e) => {
+                              e.stopPropagation();
+                              setIsSeeking((prev) => ({ ...prev, [suktaKey]: false }));
+                              const audio = audioRefs.current[suktaKey];
+                              if (audio) {
+                                setAudioProgress((prev) => ({
+                                  ...prev,
+                                  [suktaKey]: {
+                                    currentTime: audio.currentTime,
+                                    duration: audio.duration || prev[suktaKey]?.duration || null,
+                                  },
+                                }));
+                              }
                             }}
                             className="w-20 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
                             style={{
