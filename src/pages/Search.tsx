@@ -1,10 +1,12 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ChevronLeft, ChevronRight, Loader2, Volume2, Pause } from "lucide-react";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChevronLeft, ChevronRight, Loader2, Volume2, Pause, Play, BookOpen, Sun, Moon, Sparkles, Clock, Users, Flame, Zap, Droplets, Leaf, Mountain, Crown, Anchor, Shield, Star, Heart, Ruler } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRigvedaData } from "@/hooks/useRigvedaData";
 import { RigvedaVerse, SearchType } from "@/types/rigveda";
@@ -33,15 +35,179 @@ const Search = () => {
   const [maxResults, setMaxResults] = useState("1");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'verse' | 'hymn'>('verse');
-  const [translationLang, setTranslationLang] = useState("English (Griffith)");
+  const [translationLang, setTranslationLang] = useState("None");
   const [translating, setTranslating] = useState<string | null>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [isPlaying, setIsPlaying] = useState<Record<string, boolean>>({});
   const [isSeeking, setIsSeeking] = useState<Record<string, boolean>>({});
   const [audioProgress, setAudioProgress] = useState<Record<string, {currentTime: number, duration: number | null}>>({});
+  const [selectedMantra, setSelectedMantra] = useState<{ name: string; mantra: any } | null>(null); // For modal
+  const [openMantra, setOpenMantra] = useState<string | null>(null); // Track open dialog for famous mantras
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const audioListeners = useRef<Record<string, {timeupdate: () => void, ended: () => void, loadedmetadata: () => void}>>({});
   const seekInputRefs = useRef<Record<string, HTMLInputElement>>({});
+
+  // Icons and colors for slider
+  const icons = [Flame, Zap, Droplets, Leaf, Sun, Moon, Mountain, Crown, Anchor, Shield, Star, Heart];
+  const colors = [
+    "from-amber-400 to-orange-600",    // Saffron-gold (Agni/fire)
+    "from-indigo-600 to-purple-600",   // Royal-purple (Indra/thunder)
+    "from-emerald-500 to-teal-600",    // Emerald-green (Soma/plant)
+    "from-blue-500 to-cyan-600",       // Celestial-blue (Varuna/water)
+    "from-yellow-400 to-amber-600",    // Solar-gold (Surya/sun)
+    "from-violet-500 to-pink-600",     // Lunar-purple (Chandra/moon)
+    "from-stone-500 to-gray-700",      // Earthy-gray (Prithvi/earth)
+    "from-rose-500 to-red-600",        // Crimson-red (Rudra/storm)
+    "from-green-600 to-forest-600",    // Forest-green (Vanaspatis/trees)
+    "from-slate-600 to-zinc-700",      // Ancient-bronze (Yama/death)
+    "from-sky-500 to-blue-600",        // Sky-blue (Vayu/wind)
+    "from-fuchsia-500 to-violet-600"   // Mystic-fuchsia (general divine)
+  ];
+
+  // Mantras for slider
+  const mantras = useMemo(() => {
+    // Thematic icon mapping based on common FAMOUS_MANTRAS keys (adjust as needed)
+    const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+      "Gayatri Mantra": Sun,           // Solar wisdom
+      "Agni Sukta": Flame,        // Fire god
+      "Indra's Valor": Zap,            // Thunderbolt
+      "Soma Hymn": Leaf,               // Moon plant
+      "Nadi Sukta": Droplets,     // Ocean god
+      "Maha Mrityunjaya Mantra": Shield,         // Storm protector
+      "Purusha Sukta": Crown,          // Cosmic man
+      "Nasadiya Sukta": Star,          // Creation mystery
+      "Hiranyagarbha": Heart,          // Golden womb
+      // Fallback to BookOpen for unlisted
+      default: BookOpen
+    };
+
+    return Object.entries(FAMOUS_MANTRAS).map(([name, m], index) => {
+      const Icon = iconMap[name] || iconMap.default || icons[index % icons.length];
+      return {
+        name,
+        title: name,
+        location: m.location,
+        description: m.fun_fact || `${(m.meaning || '').substring(0, 100)}...`,
+        icon: Icon,
+        color: colors[index % colors.length],
+        ...m
+      };
+    });
+  }, [FAMOUS_MANTRAS]);
+
+  const MantrasSlider = () => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [isHovered, setIsHovered] = useState(false);
+
+    useEffect(() => {
+      let interval: NodeJS.Timeout | null = null;
+
+      const startInterval = () => {
+        interval = setInterval(() => {
+          setCurrentIndex((prev) => (prev + 1) % mantras.length);
+        }, 4000);
+      };
+
+      if (!isHovered) {
+        startInterval();
+      }
+
+      return () => {
+        if (interval) {
+          clearInterval(interval);
+        }
+      };
+    }, [isHovered, mantras.length]);
+
+    if (mantras.length === 0) return null;
+
+    return (
+      <div
+        className="relative overflow-hidden rounded-2xl shadow-2xl mx-auto max-w-4xl"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div className="flex transition-transform duration-700 ease-in-out" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
+          {mantras.map((mantra) => {
+            const Icon = mantra.icon;
+            return (
+              <Dialog key={mantra.name} open={openMantra === mantra.name} onOpenChange={(open) => setOpenMantra(open ? mantra.name : null)}>
+                <DialogTrigger asChild>
+                  <div className="w-full flex-shrink-0 p-8 text-center bg-gradient-to-br from-white/80 to-slate-50/80 dark:from-slate-800/80 dark:to-slate-900/80 backdrop-blur-sm cursor-pointer hover:scale-[1.02] transition-transform duration-300">
+                    <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 bg-gradient-to-r ${mantra.color} shadow-lg group`}>
+                      <Icon className="h-8 w-8 text-white transition-transform duration-300 group-hover:scale-110" />
+                    </div>
+                    <h3 className="text-2xl font-bold mb-2 text-slate-800 dark:text-slate-100">{mantra.title}</h3>
+                    <div className="text-xs text-primary mb-4">📍 {mantra.location}</div>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-md mx-auto">{mantra.description}</p>
+                  </div>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <div className={`p-2 rounded-full bg-gradient-to-r ${mantra.color}`}>
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      {mantra.title}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div className="text-sm font-semibold text-primary">📍 {mantra.location}</div>
+                    {(() => {
+                      const locationMatch = mantra.location.match(/^(\d+)\.(\d+)(?:\.(\d+))?$/);
+                      if (locationMatch) {
+                        const [, mandala, sukta, verseNum] = locationMatch;
+                        const verses = data.filter((v: RigvedaVerse) =>
+                          v.mandala === mandala && v.sukta === sukta && (!verseNum || v.verse === verseNum)
+                        ).sort((a: RigvedaVerse, b: RigvedaVerse) => parseInt(a.verse) - parseInt(b.verse));
+                        if (verses.length > 0) {
+                          return (
+                            <div className="overflow-x-auto pb-4">
+                              <div className="flex gap-4 min-w-max">
+                                {verses.map(verse => (
+                                  <CompactVerseCard key={`${verse.mandala}.${verse.sukta}.${verse.verse}`} verse={verse} />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                      }
+                      // Fallback for pre-defined single mantra content
+                      return (
+                        <>
+                          <div className="bg-mantra-bg p-4 rounded-lg font-devanagari text-base border border-amber-200">
+                            {mantra.sanskrit}
+                          </div>
+                          <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg text-sm">
+                            {mantra.meaning}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {mantra.fun_fact}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            );
+          })}
+        </div>
+        {/* Indicators */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
+          {mantras.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentIndex(index)}
+              className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                index === currentIndex ? 'bg-amber-500 scale-125' : 'bg-slate-300 dark:bg-slate-600 hover:bg-amber-400'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   // Filter data based on search criteria
   const filteredData = useMemo(() => {
@@ -318,7 +484,7 @@ const Search = () => {
       "Marathi (मराठी)": "Marathi",
       "Tamil (தமிழ்)": "Tamil",
       "Telugu (తెలుగు)": "Telugu",
-      "Bengali (বাংলা)":"Bengali",
+      "Bengali (বাংলা)": "Bengali",
     };
 
     const targetLang = langMap[translationLang];
@@ -377,6 +543,105 @@ Now provide a natural, literary ${targetLang} translation:`;
     } finally {
       setTranslating(null);
     }
+  };
+
+  // Render a compact verse card for carousel or dialog
+  const CompactVerseCard = ({ verse }: { verse: RigvedaVerse }) => {
+    const suktaKey = `${verse.mandala}.${verse.sukta}`;
+    const progress = audioProgress[suktaKey];
+    const duration = progress?.duration;
+    const currentTime = progress?.currentTime || 0;
+    const percent = duration ? (currentTime / duration) * 100 : 0;
+
+    return (
+      <Card className="flex-shrink-0 w-[280px] h-[400px] overflow-hidden">
+        <CardContent className="p-4 h-full flex flex-col">
+          <div className="font-semibold mb-2 text-primary font-devanagari text-sm">
+            ऋचा {verse.verse}
+          </div>
+          <div className="sanskrit-text bg-verse-bg rounded-lg p-2 mb-2 font-devanagari leading-relaxed flex-1 overflow-y-auto">
+            <div className="text-lg">{verse.sanskrit}</div>
+            {verse.transliteration && (
+              <div className="text-xs font-mono text-muted-foreground mt-1">
+                {verse.transliteration}
+              </div>
+            )}
+          </div>
+          <div className="text-xs mb-2 text-muted-foreground">
+            {getEnglishDeity(verse.deity)} | {getEnglishRishi(verse.rishi)} | {getEnglishMeter(verse.meter)}
+          </div>
+          {/* Simplified audio */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAudioToggle(verse.mandala, verse.sukta);
+            }}
+            className="h-8 w-8 p-0 rounded-full bg-primary/10 hover:bg-primary/20 self-end"
+          >
+            {isPlaying[suktaKey] ? <Pause className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Render translation section
+  const renderTranslation = (verse: RigvedaVerse) => {
+    if (translationLang === "None") return null;
+
+    const langMap: Record<string, string> = {
+      "Hindi (हिंदी)": "Hindi",
+      "Marathi (मराठी)": "Marathi",
+      "Tamil (தமிழ்)": "Tamil",
+      "Telugu (తెలుగు)": "Telugu",
+      "Bengali (বাংলা)": "Bengali",
+    };
+
+    if (translationLang === "English (Griffith)") {
+      return (
+        <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
+          <div className="font-semibold mb-2">English Translation (Griffith):</div>
+          {verse.english_translation}
+        </div>
+      );
+    }
+
+    if (translationLang === "English (Wilson)") {
+      return (
+        <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
+          <div className="font-semibold mb-2">English Translation (Wilson):</div>
+          {verse.english_translation_wilson || "Translation not available."}
+        </div>
+      );
+    }
+
+    const targetLang = langMap[translationLang];
+    if (!targetLang) return null;
+    const vKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
+
+    return translations[vKey] ? (
+      <div className="translation-text bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border-l-4 border-green-400">
+        <div className="font-semibold mb-2">{translationLang} Translation:</div>
+        {translations[vKey]}
+      </div>
+    ) : (
+      <Button
+        onClick={() => handleTranslate(verse)}
+        disabled={translating === vKey}
+        className="w-full"
+      >
+        {translating === vKey ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Translating to {translationLang}...
+          </>
+        ) : (
+          <>🌐 Translate to {translationLang}</>
+        )}
+      </Button>
+    );
   };
 
   if (loading) {
@@ -510,7 +775,9 @@ Now provide a natural, literary ${targetLang} translation:`;
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="None">None</SelectItem>
                   <SelectItem value="English (Griffith)">English (Griffith)</SelectItem>
+                  <SelectItem value="English (Wilson)">English (Wilson)</SelectItem>
                   <SelectItem value="Hindi (हिंदी)">Hindi (हिंदी)</SelectItem>
                   <SelectItem value="Marathi (मराठी)">Marathi (मराठी)</SelectItem>
                   <SelectItem value="Tamil (தமிழ்)">Tamil (தமிழ்)</SelectItem>
@@ -639,15 +906,24 @@ Now provide a natural, literary ${targetLang} translation:`;
                   {/* Metadata */}
                   <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
                     <div>
-                      <span className="text-muted-foreground">🙏 देवता:</span>{" "}
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Crown className="h-4 w-4" />
+                        देवता:
+                      </span>{" "}
                       <span className="font-devanagari">{verse.deity}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">👤 ऋषि/कुल:</span>{" "}
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        ऋषि/कुल:
+                      </span>{" "}
                       <span className="font-devanagari">{verse.rishi}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">📏 छन्द:</span>{" "}
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Ruler className="h-4 w-4" />
+                        छन्द:
+                      </span>{" "}
                       <span className="font-devanagari">{verse.meter}</span>
                     </div>
                   </div>
@@ -722,54 +998,8 @@ Now provide a natural, literary ${targetLang} translation:`;
                     </div>
                   </div>
 
-                  {/* English Translation */}
-                  {translationLang === "English (Griffith)" ? (
-                    <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400">
-                      <div className="font-semibold mb-2">English Translation (Griffith):</div>
-                      {verse.english_translation}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border-l-4 border-blue-400 mb-3">
-                        <div className="font-semibold mb-2">English Translation (Griffith):</div>
-                        {verse.english_translation}
-                      </div>
-
-                      {(() => {
-                        const langMap: Record<string, string> = {
-                          "Hindi (हिंदी)": "Hindi",
-                          "Marathi (मराठी)": "Marathi",
-                          "Tamil (தமிழ்)": "Tamil",
-                          "Telugu (తెలుగు)": "Telugu",
-                          "Bengali (বাংলা)": "Bengali",
-                        };
-                        const targetLang = langMap[translationLang];
-                        const vKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
-
-                        return translations[vKey] ? (
-                          <div className="translation-text bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border-l-4 border-green-400">
-                            <div className="font-semibold mb-2">{translationLang} Translation:</div>
-                            {translations[vKey]}
-                          </div>
-                        ) : (
-                          <Button
-                            onClick={() => handleTranslate(verse)}
-                            disabled={translating === vKey}
-                            className="w-full"
-                          >
-                            {translating === vKey ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Translating to {translationLang}...
-                              </>
-                            ) : (
-                              <>🌐 Translate to {translationLang}</>
-                            )}
-                          </Button>
-                        );
-                      })()}
-                    </>
-                  )}
+                  {/* Translation Section */}
+                  {renderTranslation(verse)}
                 </CardContent>
               </Card>
             );
@@ -788,6 +1018,7 @@ Now provide a natural, literary ${targetLang} translation:`;
               const duration = progress?.duration;
               const currentTime = progress?.currentTime || 0;
               const percent = duration ? (currentTime / duration) * 100 : 0;
+              const firstVerse = s.verses[0]; // Assume uniform metadata
               return (
                 <AccordionItem key={s.key} value={s.key}>
                   <AccordionTrigger className="hover:no-underline pr-0">
@@ -870,6 +1101,32 @@ Now provide a natural, literary ${targetLang} translation:`;
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {/* Sukta-level Metadata (shown once at top) */}
+                    {firstVerse && (
+                      <div className="grid grid-cols-3 gap-4 mb-4 text-sm p-3 bg-muted/20 rounded">
+                        <div>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Crown className="h-4 w-4" />
+                            देवता:
+                          </span>{" "}
+                          <span className="font-devanagari">{firstVerse.deity}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Users className="h-4 w-4" />
+                            ऋषि/कुल:
+                          </span>{" "}
+                          <span className="font-devanagari">{firstVerse.rishi}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Ruler className="h-4 w-4" />
+                            छन्द:
+                          </span>{" "}
+                          <span className="font-devanagari">{firstVerse.meter}</span>
+                        </div>
+                      </div>
+                    )}
                     {s.verses.map((verse) => {
                       return (
                         <Card key={`${verse.mandala}.${verse.sukta}.${verse.verse}`} className="mb-4">
@@ -879,25 +1136,9 @@ Now provide a natural, literary ${targetLang} translation:`;
                               ऋचा {verse.verse}
                             </div>
 
-                            {/* Metadata */}
-                            <div className="grid grid-cols-3 gap-3 mb-3 text-xs">
-                              <div>
-                                <span className="text-muted-foreground">🙏 देवता:</span>{" "}
-                                <span className="font-devanagari">{verse.deity}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">👤 ऋषि/कुल:</span>{" "}
-                                <span className="font-devanagari">{verse.rishi}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">📏 छन्द:</span>{" "}
-                                <span className="font-devanagari">{verse.meter}</span>
-                              </div>
-                            </div>
-
-                            {/* Sanskrit Text with Transliteration */}
+                            {/* Sanskrit Text with Transliteration (increased font) */}
                             <div className="sanskrit-text bg-verse-bg rounded-lg p-3 mb-3 font-devanagari leading-relaxed">
-                              <div className="text-lg mb-1">
+                              <div className="text-xl mb-1">
                                   {verse.sanskrit}
                               </div>
                               {verse.transliteration && (
@@ -907,54 +1148,8 @@ Now provide a natural, literary ${targetLang} translation:`;
                               )}
                             </div>
 
-                            {/* English Translation */}
-                            {translationLang === "English (Griffith)" ? (
-                              <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border-l-4 border-blue-400">
-                                <div className="font-semibold mb-1 text-sm">English Translation (Griffith):</div>
-                                {verse.english_translation}
-                              </div>
-                            ) : (
-                              <>
-                                <div className="translation-text bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border-l-4 border-blue-400 mb-2">
-                                  <div className="font-semibold mb-1 text-sm">English Translation (Griffith):</div>
-                                  {verse.english_translation}
-                                </div>
-
-                                {(() => {
-                                  const langMap: Record<string, string> = {
-                                    "Hindi (हिंदी)": "Hindi",
-                                    "Marathi (मराठी)": "Marathi",
-                                    "Tamil (தமிழ்)": "Tamil",
-                                    "Telugu (తెలుగు)": "Telugu",
-                                    "Bengali (বাংলা)": "Bengali",
-                                  };
-                                  const targetLang = langMap[translationLang];
-                                  const vKey = `${verse.mandala}.${verse.sukta}.${verse.verse}-${targetLang}`;
-
-                                  return translations[vKey] ? (
-                                    <div className="translation-text bg-green-50 dark:bg-green-950/30 rounded-lg p-3 border-l-4 border-green-400">
-                                      <div className="font-semibold mb-1 text-sm">{translationLang} Translation:</div>
-                                      {translations[vKey]}
-                                    </div>
-                                  ) : (
-                                    <Button
-                                      onClick={() => handleTranslate(verse)}
-                                      disabled={translating === vKey}
-                                      className="w-full"
-                                    >
-                                      {translating === vKey ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                          Translating to {translationLang}...
-                                        </>
-                                      ) : (
-                                        <>🌐 Translate to {translationLang}</>
-                                      )}
-                                    </Button>
-                                  );
-                                })()}
-                              </>
-                            )}
+                            {/* Translation Section */}
+                            {renderTranslation(verse)}
                           </CardContent>
                         </Card>
                       );
@@ -967,52 +1162,19 @@ Now provide a natural, literary ${targetLang} translation:`;
         )
       )}
 
-      {/* Famous Mantras Section */}
+      {/* Featured Mantras Slider */}
       <div className="mt-12 mb-8">
         <div className="border-t border-border mb-8" />
-        <h2 className="text-3xl font-bold mb-3">📚 Famous Mantras from Rigveda</h2>
-        <p className="text-muted-foreground mb-6">Discover the origins of mantras used in daily worship</p>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          {Object.entries(FAMOUS_MANTRAS).map(([name, mantra]) => (
-            <Card key={name} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  🕉️ {name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-sm font-semibold text-primary">📍 {mantra.location}</div>
-                <div className="text-sm text-muted-foreground">
-                  🙏 <strong>Deity:</strong> {mantra.deity} | 👤 <strong>Rishi:</strong> {mantra.rishi}
-                </div>
-                <div className="bg-mantra-bg p-4 rounded-lg font-devanagari text-base border border-amber-200">
-                  {mantra.sanskrit}
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg text-sm">
-                  {mantra.meaning}
-                </div>
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="fun-fact" className="border-none">
-                    <AccordionTrigger className="text-sm font-semibold py-2">
-                      💡 Did You Know?
-                    </AccordionTrigger>
-                    <AccordionContent className="text-sm text-muted-foreground pt-2">
-                      {mantra.fun_fact}
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <h2 className="text-3xl font-bold mb-3"> Famous Mantras </h2>
+        <p className="text-muted-foreground mb-6">Discover famous mantras - click to explore</p>
+        <MantrasSlider />
       </div>
 
       {/* Help Text */}
       <div className="border-t border-border mt-12 mb-8" />
       <Card className="bg-muted/50">
         <CardContent className="pt-6">
-          <h3 className="font-semibold mb-2">💡 Search Tips</h3>
+          <h3 className="font-semibold mb-2">Search Tips</h3>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• Use verse reference format like "1.1.1" (Mandala.Sukta.Verse) for specific verses</li>
             <li>• Use sukta reference like "1.1" to see all verses in that hymn</li>

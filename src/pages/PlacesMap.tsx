@@ -8,7 +8,7 @@ import { RigvedaVerse } from "@/types/rigveda";
 import { MapContainer, TileLayer, Marker, Popup, LayersControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { AlertTriangle, Loader2, Search, Filter, ChevronLeft, MapPin, Users, Mountain, AlertCircle } from "lucide-react";
+import { AlertTriangle, Loader2, Search, Filter, ChevronLeft, Droplets, Users, Mountain, AlertCircle } from "lucide-react";
 
 // Fix Leaflet default icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -60,24 +60,29 @@ const PLACES_DATA = [
   { name: "Arjika", lat: 37.0, lng: 72.0, type: "mountain", verses: ["arjika"], uncertainty: true, desc: "Mythical Aryan northern range." },
 ] as const;
 
-// Custom div icons for visibility (emojis, colored, larger)
+// SVG strings for map markers
+const DROPLETS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/></svg>`;
+
+const USERS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg>`;
+
+const MOUNTAIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>`;
+
+// Custom div icons for visibility (icons, colored, larger)
 const getCustomIcon = (type: string) => L.divIcon({
   className: "custom-div-icon bg-white shadow-lg rounded-full",
   html: `
     <div style="
       background-color: ${type === 'river' ? '#3b82f6' : type === 'tribe' ? '#10b981' : '#6b7280'};
-      color: white;
       width: 40px;
       height: 40px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.3);
       border: 2px solid white;
     ">
-      ${type === 'river' ? '🌊' : type === 'tribe' ? '👥' : '⛰️'}
+      ${type === 'river' ? DROPLETS_SVG : type === 'tribe' ? USERS_SVG : MOUNTAIN_SVG}
     </div>
   `,
   iconSize: [40, 40],
@@ -252,10 +257,10 @@ const PlacesMap = () => {
                 onClick={() => handlePlaceClick(place)}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${
                     place.type === 'river' ? 'bg-blue-500' : place.type === 'tribe' ? 'bg-green-500' : 'bg-gray-500'
                   }`}>
-                    {place.type === 'river' ? '🌊' : place.type === 'tribe' ? '👥' : '⛰️'}
+                    {place.type === 'river' ? <Droplets className="h-4 w-4" /> : place.type === 'tribe' ? <Users className="h-4 w-4" /> : <Mountain className="h-4 w-4" />}
                   </div>
                   <div className="flex-1">
                     <div className="font-medium">{place.name}</div>
@@ -331,7 +336,7 @@ const PlacesMap = () => {
                     <Popup maxWidth={350} className="custom-popup">
                       <div>
                         <h3 className="font-bold flex items-center gap-2 mb-2 text-lg">
-                          {isRiver && <MapPin className="h-5 w-5 text-blue-500" />}
+                          {isRiver && <Droplets className="h-5 w-5 text-blue-500" />}
                           {isTribe && <Users className="h-5 w-5 text-green-500" />}
                           {isMountain && <Mountain className="h-5 w-5 text-gray-600" />}
                           {place.name} ({place.type.charAt(0).toUpperCase() + place.type.slice(1)})
@@ -360,15 +365,15 @@ const PlacesMap = () => {
         <CardContent>
           <div className="grid md:grid-cols-3 gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm">🌊</div>
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white"><Droplets className="h-3 w-3" /></div>
               Rivers (Sapta Sindhu core)
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-sm">👥</div>
+              <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white"><Users className="h-3 w-3" /></div>
               Tribes (Panchajana settlements)
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm">⛰️</div>
+              <div className="w-6 h-6 bg-gray-500 rounded-full flex items-center justify-center text-white"><Mountain className="h-3 w-3" /></div>
               Mountains (Northern ranges)
             </div>
           </div>

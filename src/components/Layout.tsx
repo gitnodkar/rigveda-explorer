@@ -124,13 +124,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       {/* Footer */}
       <footer className="bg-slate-900 text-white border-t border-slate-800">
         <div className="container mx-auto px-4 py-6">
-          <div className="max-w-4xl mx-auto text-center space-y-2">
+          <div className="max-w-5xl mx-auto text-center space-y-2">
             <p className="font-playfair text-lg font-semibold leading-relaxed">
               Rig Veda Explorer • AI Powered
             </p>
             <div className="space-y-1 text-sm text-slate-300">
               <p className="font-inter"><strong>Sources:</strong></p>
-              <p className="font-inter">Sanskrit verses sourced from bhavykhatri/DharmicData repository on Github • English translations by Ralph T.H. Griffith</p>
+              <p className="font-inter">Sanskrit verses sourced from bhavykhatri/DharmicData repository on Github • English translations by Ralph T.H. Griffith and H. H. Wilson</p>
             </div>
             <p className="font-inter text-sm text-slate-300 italic">
               Built with ❤️ in Bhārat for Vedic scholars and spiritual seekers, By Vedant Bamnodkar
